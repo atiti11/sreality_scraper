@@ -43,6 +43,19 @@ public class AppConfig {
         this.httpReadTimeoutMs    = httpReadTimeoutMs;
     }
 
+    /** Factory for tests — bypasses environment variables entirely. */
+    public static AppConfig forTesting(
+            String mongoHost, int mongoPort,
+            String mongoDatabase, String mongoUsername, String mongoPassword,
+            String srealityBaseUrl, int perPage, int maxEstates,
+            int httpConnectTimeoutMs, int httpReadTimeoutMs) {
+        return new AppConfig(
+            mongoHost, mongoPort, mongoDatabase, mongoUsername, mongoPassword,
+            srealityBaseUrl, perPage, maxEstates,
+            httpConnectTimeoutMs, httpReadTimeoutMs
+        );
+    }
+
     public static AppConfig fromEnv() {
         return new AppConfig(
             env("MONGO_HOST",              "mongodb"),

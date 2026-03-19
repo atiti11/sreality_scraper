@@ -7,7 +7,6 @@ import com.sreality.scraper.db.MongoRepository;
 import com.sreality.scraper.http.SrealityHttpClient;
 import com.sreality.scraper.http.SrealityHttpClient.SrealityHttpException;
 import com.sreality.scraper.model.EstateDocumentBuilder;
-import com.sreality.scraper.util.HashUtil;
 import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,21 +36,39 @@ public class EstateScraper {
 
     private static final Logger log = LoggerFactory.getLogger(EstateScraper.class);
 
-    // Polite delay between HTTP requests (ms)
-    private static final long REQUEST_DELAY_MS = 300;
+    // Polite delay between HTTP requests (ms) — overridable for tests
+    private final long requestDelayMs;
 
-    // All combinations we scrape
-    private static final int[] CATEGORY_MAIN_CBS = {1, 2, 3, 4, 5};
-    private static final int[] CATEGORY_TYPE_CBS = {1, 2, 3};
+    // All combinations scraped in production
+    private static final int[] DEFAULT_CATEGORY_MAIN_CBS = {1, 2, 3, 4, 5};
+    private static final int[] DEFAULT_CATEGORY_TYPE_CBS = {1, 2, 3};
 
     private final AppConfig          config;
     private final SrealityHttpClient http;
     private final MongoRepository    mongo;
+    private final int[]              categoryMainCbs;
+    private final int[]              categoryTypeCbs;
 
+    /** Production constructor — scrapes all 15 category combinations with 300ms delay. */
     public EstateScraper(AppConfig config, SrealityHttpClient http, MongoRepository mongo) {
-        this.config = config;
-        this.http   = http;
-        this.mongo  = mongo;
+        this(config, http, mongo, DEFAULT_CATEGORY_MAIN_CBS, DEFAULT_CATEGORY_TYPE_CBS, 300L);
+    }
+
+    /** Test constructor — allows restricting categories and setting delay to 0 for speed. */
+    public EstateScraper(AppConfig config, SrealityHttpClient http, MongoRepository mongo,
+                         int[] categoryMainCbs, int[] categoryTypeCbs) {
+        this(config, http, mongo, categoryMainCbs, categoryTypeCbs, 300L);
+    }
+
+    /** Full constructor. */
+    public EstateScraper(AppConfig config, SrealityHttpClient http, MongoRepository mongo,
+                         int[] categoryMainCbs, int[] categoryTypeCbs, long requestDelayMs) {
+        this.config          = config;
+        this.http            = http;
+        this.mongo           = mongo;
+        this.categoryMainCbs = categoryMainCbs;
+        this.categoryTypeCbs = categoryTypeCbs;
+        this.requestDelayMs  = requestDelayMs;
     }
 
     // -------------------------------------------------------------------------
@@ -66,8 +83,8 @@ public class EstateScraper {
         boolean hitMaxEstates  = false;
 
         outer:
-        for (int categoryMainCb : CATEGORY_MAIN_CBS) {
-            for (int categoryTypeCb : CATEGORY_TYPE_CBS) {
+        for (int categoryMainCb : categoryMainCbs) {
+            for (int categoryTypeCb : categoryTypeCbs) {
 
                 scrapeCategory(categoryMainCb, categoryTypeCb, report);
 
@@ -172,11 +189,10 @@ public class EstateScraper {
             return;
         }
 
-        // Compute content hash from listing fields only
-        String name        = estateNode.path("name").asText("");
-        long   priceRaw    = estateNode.path("price_czk").path("value_raw").asLong();
-        String labelsStr   = estateNode.path("labelsReleased").toString();
-        String contentHash = HashUtil.md5(hashId, priceRaw, name, labelsStr);
+        // Compute content hash from listing fields only.
+        // Uses EstateDocumentBuilder.computeContentHash() to guarantee the hash
+        // is identical to what gets stored in the document by build().
+        String contentHash = EstateDocumentBuilder.computeContentHash(estateNode);
 
         // Skip if nothing changed and the document is complete.
         // If the document exists but last_update_corrupted=true, isUnchanged()
@@ -294,8 +310,9 @@ public class EstateScraper {
     }
 
     private void sleep() {
+        if (requestDelayMs <= 0) return;
         try {
-            Thread.sleep(REQUEST_DELAY_MS);
+            Thread.sleep(requestDelayMs);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }

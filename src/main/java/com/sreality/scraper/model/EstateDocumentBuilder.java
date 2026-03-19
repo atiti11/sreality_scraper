@@ -23,6 +23,32 @@ public class EstateDocumentBuilder {
 
     private EstateDocumentBuilder() {}
 
+    /**
+     * Computes the change-detection hash for a listing node.
+     * Called both when building a document (to store the hash) and when
+     * checking whether an estate has changed (in EstateScraper.processEstate).
+     *
+     * Uses the MAPPED property_features labels (not the raw labelsReleased JSON)
+     * so the hash is stable regardless of label string representation changes.
+     *
+     * @param listingNode  the estate object from the listing endpoint
+     * @return MD5 hex string
+     */
+    public static String computeContentHash(JsonNode listingNode) {
+        long   hashId    = listingNode.path("hash_id").asLong();
+        long   price     = listingNode.path("price_czk").path("value_raw").asLong();
+        String name      = listingNode.path("name").asText("");
+        // Map labels the same way build() does, so the hash is identical
+        List<String> features = mapLabels(listingNode.path("labelsReleased"), 0, true);
+        String labelsStr = features.toString();
+        return computeContentHash(hashId, price, name, labelsStr);
+    }
+
+    /** Internal: compute hash from already-resolved parts. */
+    private static String computeContentHash(long hashId, long price, String name, String labelsStr) {
+        return HashUtil.md5(hashId, price, name, labelsStr);
+    }
+
     // -------------------------------------------------------------------------
     // Public entry point
     // -------------------------------------------------------------------------
@@ -117,9 +143,10 @@ public class EstateDocumentBuilder {
         }
 
         // --- Change-detection hash ---
+        // IMPORTANT: this must match computeContentHash() exactly.
         String labelsStr = doc.get("property_features") != null
             ? doc.get("property_features").toString() : "";
-        doc.append("_content_hash", HashUtil.md5(
+        doc.append("_content_hash", computeContentHash(
             hashId,
             priceCzk.path("value_raw").asLong(),
             listingNode.path("name").asText(""),
