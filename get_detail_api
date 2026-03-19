@@ -1,0 +1,2306 @@
+{
+    "text": {
+        "name": "Popis",
+        "value": "Dovolujeme si V\u00e1m nab\u00eddnout k prodeji byt 5+kk o v\u00fdm\u011b\u0159e 225,6 m\u00b2 s terasou 115,6 m\u00b2 v reziden\u010dn\u00edm projektu Sm\u00edchov City, blok SM8.\r\nK bytu je mo\u017en\u00e9 p\u0159ikoupit 4 parkovac\u00ed st\u00e1n\u00ed, kter\u00e9 je mo\u017en\u00e9 uzav\u0159\u00edt uzav\u00edrateln\u00fdmi vraty.\r\nV cen\u011b bytu je podlahov\u00e9 topen\u00ed, p\u0159edokenn\u00ed \u017ealuzie a p\u0159\u00edprava na klimatizaci.\r\n\r\nSM8 navazuje na ji\u017e realizovan\u00e9 reziden\u010dn\u00ed bloky SM1/2 a SM3 a zahrnuje celkem 12 bytov\u00fdch dom\u016f. Je sou\u010d\u00e1st\u00ed projektu Sm\u00edchov City, jeho\u017e z\u00e1m\u011brem je nab\u00eddnout obyvatel\u016fm modern\u00ed bydlen\u00ed s vysok\u00fdm standardem proveden\u00ed, vybaven\u00e9 \u0161pi\u010dkov\u00fdmi technologiemi. Nespornou v\u00fdhodou je nav\u00edc um\u00edst\u011bn\u00ed v centru m\u011bsta. Exkluzivn\u00ed byty dopln\u00ed v p\u0159\u00edzem\u00ed objekt\u016f funk\u010dn\u00ed m\u011bstsk\u00fd parter s obchody a slu\u017ebami. V ulic\u00edch budou vys\u00e1zeny stromy, kter\u00e9 zp\u0159\u00edjemn\u00ed klima a v hork\u00fdch dnech poskytnou chladiv\u00fd st\u00edn. Blok soused\u00ed s t\u0159\u00eddou Madeleine Albrightov\u00e9 pojatou jako p\u011b\u0161\u00ed pod\u00e9ln\u00fd park a budouc\u00edm parkem Alice a Anny Masarykov\u00fdch.\r\n\r\nByty v bloku SM8 jsou navr\u017eeny tak, aby si podle sv\u00fdch preferenc\u00ed a mo\u017enost\u00ed mohl vybrat opravdu ka\u017ed\u00fd. Dispozi\u010dn\u011b tu naleznete v\u0161e \u2013 od mal\u00fdch byt\u016f 1+kk a\u017e po velk\u00e9 byty kategorie 5+kk s n\u00e1dhern\u00fdmi v\u00fdhledy na Prahu. Samoz\u0159ejmost\u00ed je dostatek parkovac\u00edch m\u00edst, technick\u00e9 z\u00e1zem\u00ed a sklepn\u00ed k\u00f3je v suter\u00e9nu objektu. V posledn\u00edm podla\u017e\u00ed jsou pak ty nejexkluzivn\u011bj\u0161\u00ed byty, z nich\u017e n\u011bkter\u00e9 nab\u00edz\u00ed jedine\u010dn\u00fd pohled na Vy\u0161ehrad. V\u0161echny byty jsou navr\u017eeny ve vysok\u00e9m standardu, co\u017e se t\u00fdk\u00e1 povrchov\u00fdch materi\u00e1l\u016f i za\u0159\u00edzen\u00ed, jako je podlahov\u00e9 topen\u00ed \u010di vzduchotechnika s rekuperac\u00ed vzduchu. Standard byt\u016f lze samoz\u0159ejm\u011b p\u0159izp\u016fsobit pot\u0159eb\u00e1m budouc\u00edch majitel\u016f. Sta\u010d\u00ed se obr\u00e1tit na na\u0161e prodejce."
+    },
+    "poi_doctors": {
+        "url": "https://www.firmy.cz/Prvni-pomoc-a-zdravotnictvi/Zdravotnicke-sluzby/Zdravotnicka-zarizeni?x=14.4055314158&y=50.067232877&rt=adresa",
+        "values": [
+            {
+                "distance": 252.0,
+                "rating": 5,
+                "description": "Gynekologick\u00e1 ordinace - MUDr. Eva Kettnerov\u00e1",
+                "walkDistance": 395,
+                "index": 1,
+                "url": "https://www.firmy.cz/detail/393920-gynekologicka-ordinace-mudr-eva-kettnerova-praha-smichov.html",
+                "lines": [],
+                "lon": 14.4027681350708,
+                "source": "firm",
+                "source_id": 393920,
+                "time": 363,
+                "lat": 50.06863784790039,
+                "review_count": 7,
+                "photo_url": "//d48-a.sdn.cz/d_48/c_img_G_C/YbR9u6.jpeg?fl=res,{width},{height},3",
+                "imgUrl": "https://api.mapy.cz/poiimg/icon/405",
+                "name": "L\u00e9ka\u0159"
+            },
+            {
+                "distance": 397.0,
+                "rating": 4,
+                "description": "MVDr. Jana Luke\u0161ov\u00e1",
+                "index": 1,
+                "url": "https://www.firmy.cz/detail/473617-mvdr-jana-lukesova-praha-smichov.html",
+                "lines": [],
+                "lon": 14.40017032623291,
+                "source": "firm",
+                "source_id": 473617,
+                "lat": 50.068172454833984,
+                "review_count": 24,
+                "photo_url": "//d48-a.sdn.cz/d_48/c_img_oV_A/kQOIvbF2D1CgWWKy6CA6FWU/42b9.jpeg?fl=res,{width},{height},3",
+                "imgUrl": "https://api.mapy.cz/poiimg/icon/164",
+                "name": "Veterin\u00e1\u0159"
+            },
+            {
+                "distance": 401.0,
+                "rating": -1,
+                "description": "Poliklinika profesora \u0158eh\u00e1ka",
+                "index": 2,
+                "url": "https://www.firmy.cz/detail/395137-poliklinika-profesora-rehaka-praha-smichov.html",
+                "lines": [],
+                "lon": 14.403173446655273,
+                "source": "firm",
+                "source_id": 395137,
+                "lat": 50.07051086425781,
+                "review_count": 0,
+                "photo_url": "//d48-a.sdn.cz/d_48/c_img_H_D/aYXLDM.jpeg?fl=res,{width},{height},3",
+                "imgUrl": "https://api.mapy.cz/poiimg/icon/418",
+                "name": "L\u00e9ka\u0159"
+            },
+            {
+                "distance": 416.0,
+                "rating": 5,
+                "description": "MUDr. Marta Soukupov\u00e1",
+                "index": 3,
+                "url": "https://www.firmy.cz/detail/385761-mudr-marta-soukupova-praha-smichov.html",
+                "lines": [],
+                "lon": 14.399892807006836,
+                "source": "firm",
+                "source_id": 385761,
+                "lat": 50.0662841796875,
+                "review_count": 9,
+                "photo_url": "//d48-a.sdn.cz/d_48/c_img_H_D/CHj8RB.jpeg?fl=res,{width},{height},3",
+                "imgUrl": "https://api.mapy.cz/poiimg/icon/405",
+                "name": "L\u00e9ka\u0159"
+            },
+            {
+                "distance": 429.0,
+                "rating": 4,
+                "description": "MUDR. KATE\u0158INA PELECHOV\u00c1 - PRAKTICK\u00c1 L\u00c9KA\u0158KA",
+                "index": 4,
+                "url": "https://www.firmy.cz/detail/385760-mudr-katerina-pelechova-prakticka-lekarka-praha-smichov.html",
+                "lines": [],
+                "lon": 14.399714469909668,
+                "source": "firm",
+                "source_id": 385760,
+                "lat": 50.06625747680664,
+                "review_count": 15,
+                "photo_url": "//d48-a.sdn.cz/d_48/c_img_H_D/V088RA.jpeg?fl=res,{width},{height},3",
+                "imgUrl": "https://api.mapy.cz/poiimg/icon/405",
+                "name": "L\u00e9ka\u0159"
+            }
+        ],
+        "name": "L\u00e9ka\u0159i"
+    },
+    "poi": [
+        {
+            "distance": 1086.0,
+            "rating": 5,
+            "description": "Gabriel Loci",
+            "index": 1,
+            "url": "https://www.firmy.cz/detail/13537270-gabriel-loci-praha-smichov.html",
+            "lines": [],
+            "lon": 14.396063804626465,
+            "source": "firm",
+            "source_id": 13537270,
+            "lat": 50.07487487792969,
+            "review_count": 17,
+            "photo_url": "//d48-a.sdn.cz/d_48/c_img_QJ_v/xTwBaQd.jpeg?fl=res,{width},{height},3",
+            "imgUrl": "https://api.mapy.cz/poiimg/icon/39",
+            "name": "Divadlo"
+        },
+        {
+            "distance": 556.0,
+            "rating": 3,
+            "description": "Potraviny Lidick\u00e1",
+            "index": 1,
+            "url": "https://www.firmy.cz/detail/2469177-potraviny-lidicka-praha-smichov.html",
+            "lines": [],
+            "lon": 14.40475845336914,
+            "source": "firm",
+            "source_id": 2469177,
+            "lat": 50.072208404541016,
+            "review_count": 1,
+            "photo_url": "//d48-a.sdn.cz/d_48/c_img_p8_A/nPVpfd5QLLbHLYBtEFxWX4i/04c8.jpeg?fl=res,{width},{height},3",
+            "imgUrl": "https://api.mapy.cz/poiimg/icon/423",
+            "name": "Ve\u010derka"
+        },
+        {
+            "distance": 345.0,
+            "rating": 4,
+            "description": "Hosp\u016fdka Knofl\u00edk",
+            "index": 1,
+            "url": "https://www.firmy.cz/detail/2253647-hospudka-knoflik-praha-smichov.html",
+            "lines": [],
+            "lon": 14.404561996459961,
+            "source": "firm",
+            "source_id": 2253647,
+            "lat": 50.070274353027344,
+            "review_count": 8,
+            "photo_url": "//d48-a.sdn.cz/d_48/c_img_G_C/4hQUQO.jpeg?fl=res,{width},{height},3",
+            "imgUrl": "https://api.mapy.cz/poiimg/icon/362",
+            "name": "Hospoda"
+        },
+        {
+            "distance": 397.0,
+            "rating": 4,
+            "description": "MVDr. Jana Luke\u0161ov\u00e1",
+            "index": 1,
+            "url": "https://www.firmy.cz/detail/473617-mvdr-jana-lukesova-praha-smichov.html",
+            "lines": [],
+            "lon": 14.40017032623291,
+            "source": "firm",
+            "source_id": 473617,
+            "lat": 50.068172454833984,
+            "review_count": 24,
+            "photo_url": "//d48-a.sdn.cz/d_48/c_img_oV_A/kQOIvbF2D1CgWWKy6CA6FWU/42b9.jpeg?fl=res,{width},{height},3",
+            "imgUrl": "https://api.mapy.cz/poiimg/icon/164",
+            "name": "Veterin\u00e1\u0159"
+        },
+        {
+            "distance": 408.0,
+            "rating": 5,
+            "description": "Caf\u00e9 Alegre",
+            "index": 1,
+            "url": "https://www.firmy.cz/detail/2384627-cafe-alegre-praha-smichov.html",
+            "lines": [],
+            "lon": 14.402129173278809,
+            "source": "firm",
+            "source_id": 2384627,
+            "lat": 50.07018280029297,
+            "review_count": 16,
+            "photo_url": "//d48-a.sdn.cz/d_48/c_img_G_D/EJ5EB1.jpeg?fl=res,{width},{height},3",
+            "imgUrl": "https://api.mapy.cz/poiimg/icon/38",
+            "name": "Cukr\u00e1rna"
+        },
+        {
+            "distance": 534.0,
+            "rating": 4,
+            "description": "CineStar And\u011bl",
+            "index": 1,
+            "url": "https://www.firmy.cz/detail/2537565-cinestar-andel-praha-smichov.html",
+            "lines": [],
+            "lon": 14.401565551757812,
+            "source": "firm",
+            "source_id": 2537565,
+            "lat": 50.07130432128906,
+            "review_count": 85,
+            "photo_url": "//d48-a.sdn.cz/d_48/c_img_G_C/h4aBxEP.jpeg?fl=res,{width},{height},3",
+            "imgUrl": "https://api.mapy.cz/poiimg/icon/62",
+            "name": "Kino"
+        },
+        {
+            "distance": 340.0,
+            "rating": -1,
+            "description": "D\u011btsk\u00e9 h\u0159i\u0161t\u011b sady Na Skalce",
+            "index": 1,
+            "url": "https://mapy.cz/zakladni?x=14.400799563154578&y=50.067573316015284&z=17&source=base&id=1927075",
+            "lines": [],
+            "lon": 14.400799563154578,
+            "source": "base",
+            "source_id": 1927075,
+            "lat": 50.067573316015284,
+            "review_count": 0,
+            "photo_url": "https://d34-a.sdn.cz/d_34/c_img_QP_n/JNRJVC.mpo?fl=cro,0,1035,4032,1250%7Cres,{width},{height},3",
+            "imgUrl": "https://api.mapy.cz/poiimg/icon/204",
+            "name": "H\u0159i\u0161t\u011b"
+        },
+        {
+            "distance": 933.0,
+            "rating": -1,
+            "description": "Bazilika sv. Petra a Pavla",
+            "index": 1,
+            "url": "https://mapy.cz/zakladni?x=14.4178455890597&y=50.0644239776964&z=17&source=base&id=1915795",
+            "lines": [],
+            "lon": 14.4178455890597,
+            "source": "base",
+            "source_id": 1915795,
+            "lat": 50.0644239776964,
+            "review_count": 0,
+            "photo_url": "https://d34-a.sdn.cz/d_34/c_img_QK_1/duFLOz.jpeg?fl=cro,0,112,1400,434%7Cres,{width},{height},3",
+            "imgUrl": "https://api.mapy.cz/poiimg/icon/66",
+            "name": "Kulturn\u00ed pam\u00e1tka"
+        },
+        {
+            "distance": 4095.0,
+            "rating": -1,
+            "description": "Kov\u00e1\u0159ovic mez",
+            "index": 1,
+            "url": "https://mapy.cz/zakladni?x=14.36107759920759&y=50.04395254566995&z=17&source=base&id=2339664",
+            "lines": [],
+            "lon": 14.36107759920759,
+            "source": "base",
+            "source_id": 2339664,
+            "lat": 50.04395254566995,
+            "review_count": 0,
+            "photo_url": "https://d34-a.sdn.cz/d_34/c_img_p7_A/kOzkBkwYBTBLrRlPWKFg4gow/dac4.jpeg?fl=res,{width},{height},3",
+            "imgUrl": "https://api.mapy.cz/poiimg/icon/368",
+            "name": "P\u0159\u00edrodn\u00ed zaj\u00edmavost"
+        },
+        {
+            "distance": 252.0,
+            "rating": 5,
+            "description": "Gynekologick\u00e1 ordinace - MUDr. Eva Kettnerov\u00e1",
+            "walkDistance": 395,
+            "index": 1,
+            "url": "https://www.firmy.cz/detail/393920-gynekologicka-ordinace-mudr-eva-kettnerova-praha-smichov.html",
+            "lines": [],
+            "lon": 14.4027681350708,
+            "source": "firm",
+            "source_id": 393920,
+            "time": 363,
+            "lat": 50.06863784790039,
+            "review_count": 7,
+            "photo_url": "//d48-a.sdn.cz/d_48/c_img_G_C/YbR9u6.jpeg?fl=res,{width},{height},3",
+            "imgUrl": "https://api.mapy.cz/poiimg/icon/405",
+            "name": "L\u00e9ka\u0159"
+        },
+        {
+            "distance": 160.0,
+            "rating": -1,
+            "description": "And\u011bl",
+            "walkDistance": 230,
+            "index": 1,
+            "url": "https://mapy.cz/zakladni?x=14.4041297511&y=50.0683523312&z=17&source=pubt&id=15200241",
+            "lines": [],
+            "lon": 14.4041297511,
+            "source": "pubt",
+            "source_id": 15200241,
+            "time": 221,
+            "lat": 50.0683523312,
+            "review_count": 0,
+            "photo_url": "https://d34-a.sdn.cz/d_34/c_img_QK_q/Ai7BOc.jpeg?fl=res,{width},{height},3",
+            "imgUrl": "https://api.mapy.cz/poiimg/icon/262",
+            "name": "Metro"
+        },
+        {
+            "distance": 105.0,
+            "rating": -1,
+            "description": "Na Kn\u00ed\u017eec\u00ed",
+            "walkDistance": 132,
+            "index": 1,
+            "url": "https://mapy.cz/zakladni?x=14.406961&y=50.067467&z=17&source=pubt&id=25201076",
+            "lines": [
+                {
+                    "poi_id": 25201076,
+                    "terminus": "S\u00eddli\u0161t\u011b Barrandov",
+                    "line_label": "10",
+                    "departure_direction": -1,
+                    "line_id": "L10",
+                    "type": "tram"
+                },
+                {
+                    "poi_id": 25201076,
+                    "terminus": "S\u00eddli\u0161t\u011b Barrandov",
+                    "line_label": "12",
+                    "departure_direction": -1,
+                    "line_id": "L12",
+                    "type": "tram"
+                },
+                {
+                    "poi_id": 25201076,
+                    "terminus": "Hlubo\u010depy",
+                    "line_label": "16",
+                    "departure_direction": -1,
+                    "line_id": "L16",
+                    "type": "tram"
+                },
+                {
+                    "poi_id": 25201076,
+                    "terminus": "S\u00eddli\u0161t\u011b Barrandov",
+                    "line_label": "20",
+                    "departure_direction": -1,
+                    "line_id": "L20",
+                    "type": "tram"
+                },
+                {
+                    "poi_id": 25201076,
+                    "terminus": "Slivenec",
+                    "line_label": "4",
+                    "departure_direction": -1,
+                    "line_id": "L4",
+                    "type": "tram"
+                },
+                {
+                    "poi_id": 25201076,
+                    "terminus": "Slivenec",
+                    "line_label": "5",
+                    "departure_direction": -1,
+                    "line_id": "L5",
+                    "type": "tram"
+                },
+                {
+                    "poi_id": 25201076,
+                    "terminus": "Plze\u0148ka",
+                    "line_label": "9",
+                    "departure_direction": -1,
+                    "line_id": "L9",
+                    "type": "tram"
+                },
+                {
+                    "poi_id": 25201076,
+                    "terminus": "Slivenec",
+                    "line_label": "94",
+                    "departure_direction": 1,
+                    "line_id": "L94",
+                    "type": "tram"
+                },
+                {
+                    "poi_id": 25201076,
+                    "terminus": "Skalka",
+                    "line_label": "901",
+                    "departure_direction": 1,
+                    "line_id": "L901",
+                    "type": "bus"
+                },
+                {
+                    "poi_id": 25201076,
+                    "terminus": "Ban\u011b",
+                    "line_label": "907",
+                    "departure_direction": 1,
+                    "line_id": "L907",
+                    "type": "bus"
+                }
+            ],
+            "lon": 14.406961,
+            "source": "pubt",
+            "source_id": 25201076,
+            "time": 118,
+            "lat": 50.067467,
+            "review_count": 0,
+            "photo_url": "https://d34-a.sdn.cz/d_34/c_img_oe_A/nO1Ur3YPjBC0ZD7VHEkXmtX/5294.jpeg?fl=res,{width},{height},3",
+            "imgUrl": "https://api.mapy.cz/poiimg/icon/155",
+            "name": "Tram"
+        },
+        {
+            "distance": 454.0,
+            "rating": 3,
+            "description": "Po\u0161ta Praha 53 - \u010cesk\u00e1 po\u0161ta, s.p.",
+            "walkDistance": 635,
+            "index": 1,
+            "url": "https://www.firmy.cz/detail/431282-posta-praha-53-praha-smichov.html",
+            "lines": [],
+            "lon": 14.399519920349121,
+            "source": "firm",
+            "source_id": 431282,
+            "time": 667,
+            "lat": 50.06857681274414,
+            "review_count": 26,
+            "photo_url": "//d48-a.sdn.cz/d_48/c_img_gZ_i/KACfs.jpeg?fl=cro,0,961,4032,1250|res,{width},{height},3",
+            "imgUrl": "https://api.mapy.cz/poiimg/icon/122",
+            "name": "Po\u0161ta"
+        },
+        {
+            "distance": 733.0,
+            "rating": 4,
+            "description": "Dr.Max L\u00e9k\u00e1rna",
+            "walkDistance": 847,
+            "index": 1,
+            "url": "https://www.firmy.cz/detail/12856961-dr-max-lekarna-praha-smichov.html",
+            "lines": [],
+            "lon": 14.402473449707031,
+            "source": "firm",
+            "source_id": 12856961,
+            "time": 805,
+            "lat": 50.073524475097656,
+            "review_count": 7,
+            "photo_url": "//d48-a.sdn.cz/d_48/c_img_p9_A/nCTUX1iX5CoHumBURGCcUDf/8053.png?fl=res,{width},{height},3",
+            "imgUrl": "https://api.mapy.cz/poiimg/icon/72",
+            "name": "L\u00e9k\u00e1rna"
+        },
+        {
+            "distance": 685.0,
+            "rating": -1,
+            "description": "Praha-Sm\u00edchov",
+            "walkDistance": 876,
+            "index": 1,
+            "url": "https://mapy.cz/zakladni?x=14.4080585658&y=50.061288517&z=17&source=pubt&id=15212579",
+            "lines": [
+                {
+                    "poi_id": 15212579,
+                    "terminus": "Furth im Wald",
+                    "line_label": "Ex6",
+                    "departure_direction": 1,
+                    "line_id": "Ex6",
+                    "type": "vlak"
+                },
+                {
+                    "poi_id": 15212579,
+                    "terminus": "Praha hlavn\u00ed n\u00e1dra\u017e\u00ed",
+                    "line_label": "Ex6",
+                    "departure_direction": -1,
+                    "line_id": "Ex6",
+                    "type": "vlak"
+                },
+                {
+                    "poi_id": 15212579,
+                    "terminus": "Klatovy",
+                    "line_label": "R16",
+                    "departure_direction": 1,
+                    "line_id": "R16",
+                    "type": "vlak"
+                },
+                {
+                    "poi_id": 15212579,
+                    "terminus": "Praha hlavn\u00ed n\u00e1dra\u017e\u00ed",
+                    "line_label": "R16",
+                    "departure_direction": -1,
+                    "line_id": "R16",
+                    "type": "vlak"
+                },
+                {
+                    "poi_id": 15212579,
+                    "terminus": "\u010cesk\u00e9 Bud\u011bjovice",
+                    "line_label": "R26",
+                    "departure_direction": 1,
+                    "line_id": "R26",
+                    "type": "vlak"
+                },
+                {
+                    "poi_id": 15212579,
+                    "terminus": "Kralovice u Rakovn\u00edka",
+                    "line_label": "R 1278",
+                    "departure_direction": 1,
+                    "line_id": "R_1278",
+                    "type": "vlak"
+                },
+                {
+                    "poi_id": 15212579,
+                    "terminus": "Praha hlavn\u00ed n\u00e1dra\u017e\u00ed",
+                    "line_label": "R 1279",
+                    "departure_direction": 1,
+                    "line_id": "R_1279",
+                    "type": "vlak"
+                },
+                {
+                    "poi_id": 15212579,
+                    "terminus": "Most",
+                    "line_label": "R 1352",
+                    "departure_direction": 1,
+                    "line_id": "R_1352",
+                    "type": "vlak"
+                },
+                {
+                    "poi_id": 15212579,
+                    "terminus": "Bene\u0161ov u Prahy",
+                    "line_label": "R 1353",
+                    "departure_direction": 1,
+                    "line_id": "R_1353",
+                    "type": "vlak"
+                },
+                {
+                    "poi_id": 15212579,
+                    "terminus": "Lu\u017en\u00e1 u Rakovn\u00edka",
+                    "line_label": "R 17704",
+                    "departure_direction": 1,
+                    "line_id": "R_17704",
+                    "type": "vlak"
+                },
+                {
+                    "poi_id": 15212579,
+                    "terminus": "Nu\u010dice zast\u00e1vka",
+                    "line_label": "S6",
+                    "departure_direction": -1,
+                    "line_id": "S\u010c-S6",
+                    "type": "vlak"
+                },
+                {
+                    "poi_id": 15212579,
+                    "terminus": "Rudn\u00e1 u Prahy",
+                    "line_label": "S65",
+                    "departure_direction": 1,
+                    "line_id": "S\u010c-S65",
+                    "type": "vlak"
+                },
+                {
+                    "poi_id": 15212579,
+                    "terminus": "Praha hlavn\u00ed n\u00e1dra\u017e\u00ed",
+                    "line_label": "S7",
+                    "departure_direction": 1,
+                    "line_id": "S\u010c-S7",
+                    "type": "vlak"
+                },
+                {
+                    "poi_id": 15212579,
+                    "terminus": "\u0158evnice",
+                    "line_label": "S7",
+                    "departure_direction": -1,
+                    "line_id": "S\u010c-S7",
+                    "type": "vlak"
+                },
+                {
+                    "poi_id": 15212579,
+                    "terminus": "Praha-Zli\u010d\u00edn",
+                    "line_label": "T1",
+                    "departure_direction": 1,
+                    "line_id": "S\u010c-T1",
+                    "type": "vlak"
+                },
+                {
+                    "poi_id": 15212579,
+                    "terminus": "Praha hlavn\u00ed n\u00e1dra\u017e\u00ed",
+                    "line_label": "T1",
+                    "departure_direction": -1,
+                    "line_id": "S\u010c-T1",
+                    "type": "vlak"
+                },
+                {
+                    "poi_id": 15212579,
+                    "terminus": "Praha hlavn\u00ed n\u00e1dra\u017e\u00ed",
+                    "line_label": "T4",
+                    "departure_direction": 1,
+                    "line_id": "S\u010c-T4",
+                    "type": "vlak"
+                },
+                {
+                    "poi_id": 15212579,
+                    "terminus": "Praha hlavn\u00ed n\u00e1dra\u017e\u00ed",
+                    "line_label": "T6",
+                    "departure_direction": 1,
+                    "line_id": "S\u010c-T6",
+                    "type": "vlak"
+                },
+                {
+                    "poi_id": 15212579,
+                    "terminus": "Rakovn\u00edk",
+                    "line_label": "T7",
+                    "departure_direction": 1,
+                    "line_id": "S\u010c-T7",
+                    "type": "vlak"
+                },
+                {
+                    "poi_id": 15212579,
+                    "terminus": "Praha hlavn\u00ed n\u00e1dra\u017e\u00ed",
+                    "line_label": "T7",
+                    "departure_direction": -1,
+                    "line_id": "S\u010c-T7",
+                    "type": "vlak"
+                }
+            ],
+            "lon": 14.4080585658,
+            "source": "pubt",
+            "source_id": 15212579,
+            "time": 788,
+            "lat": 50.061288517,
+            "review_count": 0,
+            "photo_url": "https://d34-a.sdn.cz/d_34/c_img_oY_A/nsLxLojICbyt3TqC2Ny6L/30df.jpeg?fl=res,{width},{height},3",
+            "imgUrl": "https://api.mapy.cz/poiimg/icon/169",
+            "name": "Vlak"
+        },
+        {
+            "distance": 121.0,
+            "rating": 3,
+            "description": "Restaurant & Music Club Dog\u00b4s Bollocks",
+            "walkDistance": 130,
+            "index": 1,
+            "url": "https://www.firmy.cz/detail/328360-restaurant-music-club-dog-s-bollocks-praha-smichov.html",
+            "lines": [],
+            "lon": 14.407177925109863,
+            "source": "firm",
+            "source_id": 328360,
+            "time": 117,
+            "lat": 50.06749725341797,
+            "review_count": 6,
+            "photo_url": "//d48-a.sdn.cz/d_48/c_img_QK_M/VKyOY.jpeg?fl=res,{width},{height},3",
+            "imgUrl": "https://api.mapy.cz/poiimg/icon/133",
+            "name": "Restaurace"
+        },
+        {
+            "distance": 634.0,
+            "rating": 3,
+            "description": "Tesco",
+            "walkDistance": 731,
+            "index": 1,
+            "url": "https://www.firmy.cz/detail/733908-tesco-praha-smichov.html",
+            "lines": [],
+            "lon": 14.401899337768555,
+            "source": "firm",
+            "source_id": 733908,
+            "time": 692,
+            "lat": 50.07243347167969,
+            "review_count": 48,
+            "photo_url": "//d48-a.sdn.cz/d_48/c_img_p9_A/kY1K2LlXQJGqrCmHF7r03V/72b5.png?fl=res,{width},{height},3",
+            "imgUrl": "https://api.mapy.cz/poiimg/icon/101",
+            "name": "Obchod"
+        },
+        {
+            "distance": 172.0,
+            "rating": -1,
+            "description": "Na Kn\u00ed\u017eec\u00ed",
+            "walkDistance": 267,
+            "index": 1,
+            "url": "https://mapy.cz/zakladni?x=14.4042760441107&y=50.0685553525542&z=17&source=pubt&id=15301064",
+            "lines": [
+                {
+                    "poi_id": 15301064,
+                    "terminus": "N\u00e1dra\u017e\u00ed Radot\u00edn",
+                    "line_label": "120",
+                    "departure_direction": 1,
+                    "line_id": "L120",
+                    "type": "bus"
+                },
+                {
+                    "poi_id": 15301064,
+                    "terminus": "Na Kn\u00ed\u017eec\u00ed",
+                    "line_label": "231",
+                    "departure_direction": 1,
+                    "line_id": "L231",
+                    "type": "bus"
+                },
+                {
+                    "poi_id": 15301064,
+                    "terminus": "Sm\u00edchovsk\u00e9 n\u00e1dra\u017e\u00ed",
+                    "line_label": "232",
+                    "departure_direction": 1,
+                    "line_id": "L232",
+                    "type": "bus"
+                }
+            ],
+            "lon": 14.4042760441107,
+            "source": "pubt",
+            "source_id": 15301064,
+            "time": 255,
+            "lat": 50.0685553525542,
+            "review_count": 0,
+            "photo_url": "https://d34-a.sdn.cz/d_34/c_img_QR_n/LfCBPc.jpeg?fl=res,{width},{height},3",
+            "imgUrl": "https://api.mapy.cz/poiimg/icon/198",
+            "name": "Bus MHD"
+        },
+        {
+            "distance": 460.0,
+            "rating": -1,
+            "description": "Multifunk\u010dn\u00ed h\u0159i\u0161t\u011b Ar\u00e9na sportu",
+            "walkDistance": 607,
+            "index": 1,
+            "url": "https://mapy.cz/zakladni?x=14.410780157802549&y=50.069641266015076&z=17&source=base&id=2554231",
+            "lines": [],
+            "lon": 14.410780157802549,
+            "source": "base",
+            "source_id": 2554231,
+            "time": 546,
+            "lat": 50.069641266015076,
+            "review_count": 0,
+            "photo_url": "https://d34-a.sdn.cz/d_34/c_img_oY_A/kBkJRwehYDsMiMjKC2DitI/51f7.jpeg?fl=rot,270,0%7Cres,{width},{height},3",
+            "imgUrl": "https://api.mapy.cz/poiimg/icon/144",
+            "name": "Sportovi\u0161t\u011b"
+        },
+        {
+            "distance": 500.0,
+            "rating": 4,
+            "description": "Z\u00e1kladn\u00ed \u0161kola a mate\u0159sk\u00e1 \u0161kola Praha 5 - Sm\u00edchov, U Santo\u0161ky 1/1007",
+            "walkDistance": 817,
+            "index": 1,
+            "url": "https://www.firmy.cz/detail/401396-zakladni-skola-a-materska-skola-praha-5-smichov-u-santosky-1-1007-praha-smichov.html",
+            "lines": [],
+            "lon": 14.398818016052246,
+            "source": "firm",
+            "source_id": 401396,
+            "time": 979,
+            "lat": 50.06593704223633,
+            "review_count": 2,
+            "photo_url": "//d48-a.sdn.cz/d_48/c_img_G_C/f2L9q.jpeg?fl=res,{width},{height},3",
+            "imgUrl": "https://api.mapy.cz/poiimg/icon/142",
+            "name": "\u0160kola"
+        },
+        {
+            "distance": 243.0,
+            "rating": 5,
+            "description": "Mate\u0159sk\u00e1 \u0161kola, Praha 5 - Sm\u00edchov, U \u017delezni\u010dn\u00edho mostu 2629",
+            "walkDistance": 327,
+            "index": 1,
+            "url": "https://www.firmy.cz/detail/617142-materska-skola-praha-5-smichov-u-zeleznicniho-mostu-2629-praha-smichov.html",
+            "lines": [],
+            "lon": 14.408772468566895,
+            "source": "firm",
+            "source_id": 617142,
+            "time": 294,
+            "lat": 50.06655502319336,
+            "review_count": 2,
+            "photo_url": "//d48-a.sdn.cz/d_48/c_img_oV_A/nPt0vAiT3tDecN9UpCA6ojE/9645.jpeg?fl=res,{width},{height},3",
+            "imgUrl": "https://api.mapy.cz/poiimg/icon/412",
+            "name": "\u0160kolka"
+        },
+        {
+            "distance": 215.0,
+            "rating": 5,
+            "description": "Bankomat \u010cesk\u00e9 spo\u0159itelny",
+            "walkDistance": 304,
+            "index": 1,
+            "url": "https://www.firmy.cz/detail/594866-bankomat-ceske-sporitelny-praha-smichov.html",
+            "lines": [],
+            "lon": 14.404050827026367,
+            "source": "firm",
+            "source_id": 594866,
+            "time": 289,
+            "lat": 50.068912506103516,
+            "review_count": 2,
+            "photo_url": "//d48-a.sdn.cz/d_48/c_img_oV_A/nPt0vAiT3tBexr9W0CBNofa/e45a.jpeg?fl=res,{width},{height},3",
+            "imgUrl": "https://api.mapy.cz/poiimg/icon/28",
+            "name": "Bankomat"
+        }
+    ],
+    "seo": {
+        "category_main_cb": 1,
+        "category_sub_cb": 10,
+        "category_type_cb": 1,
+        "locality": "praha--siklove"
+    },
+    "codeItems": {
+        "something_more3": [
+            3310
+        ],
+        "something_more2": [
+            3140
+        ],
+        "something_more1": [
+            3110,
+            3120
+        ],
+        "ownership": 1,
+        "building_type_search": 3
+    },
+    "meta_description": "Byt 5+kk 210 m\u00b2 k prodeji \u0160iklov\u00e9, Praha; 57\u00a0992\u00a0960 K\u010d (Uveden\u00e1 cena je v\u010detn\u011b DPH, sklepa, bez parkovac\u00edho st\u00e1n\u00ed), terasa, parkovac\u00ed m\u00edsto, v\u00fdtah, bezbari\u00e9rov\u00fd, n\u00edzkoenergetick\u00fd, skeletov\u00e1 stavba, osobn\u00ed vlastnictv\u00ed, novostavby.",
+    "_embedded": {
+        "project": {
+            "meta_description": "Najd\u011bte nov\u00e9 bydlen\u00ed na sreality.cz s aktu\u00e1ln\u00edm seznamem novostaveb, developersk\u00fdch projekt\u016f, bytov\u00fdch dom\u016f i rezidenc\u00ed v cel\u00e9 \u010cR.",
+            "result_size": 1,
+            "title": "Novostavby, developersk\u00e9 projekty",
+            "filter": {
+                "suggested_regionId": -1,
+                "suggested_districtId": -1
+            },
+            "_links": {
+                "self": {
+                    "href": "/cs/v2/projects?projectId=35971"
+                }
+            },
+            "per_page": 20,
+            "page": 1,
+            "projects": [
+                {
+                    "paid_logo": 0,
+                    "name": "SM\u00cdCHOV CITY SEVER, II. ETAPA",
+                    "premise_id": 3360,
+                    "locality": "\u0160iklov\u00e9, Praha, Sm\u00edchov",
+                    "date_move": "01.06.2028",
+                    "price": 0,
+                    "has_video": false,
+                    "id": 35971,
+                    "_links": {
+                        "dynamicDown": [
+                            {
+                                "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/nCTUX1iX5bIUBBWtF9CuaV/3b96.jpeg?fl=res,{width},{height},3|shr,,20|jpg,90"
+                            }
+                        ],
+                        "dynamicUp": [
+                            {
+                                "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/nCTUX1iX5bIUBBWtF9CuaV/3b96.jpeg?fl=res,{width},{height},3|wrm,/watermark/sreality.png,10|shr,,20|jpg,90"
+                            }
+                        ],
+                        "iterator": {
+                            "href": "/cs/v2/project-iterator/0?projectId=35971"
+                        },
+                        "self": {
+                            "href": "/cs/v2/project/35971"
+                        },
+                        "banner_image": [
+                            {
+                                "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/nCTUX1iX5bIUBBWtF9CuaV/3b96.jpeg?fl=res,250,250,3|shr,,20|jpg,90"
+                            }
+                        ],
+                        "images": [
+                            {
+                                "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/nCTUX1iX5bIUBBWtF9CuaV/3b96.jpeg?fl=res,500,400,3|shr,,20|jpg,90"
+                            },
+                            {
+                                "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/nCTUX1iX5Do9kXBYkF9CubC/a584.jpeg?fl=res,500,400,3|shr,,20|jpg,90"
+                            },
+                            {
+                                "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/nCTUX1iX5CFdAHBaeF9Cubv/bfcf.jpeg?fl=res,500,400,3|shr,,20|jpg,90"
+                            },
+                            {
+                                "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/nCTUX1iX5CFdAHBZwF9CucT/62ba.jpeg?fl=res,500,400,3|shr,,20|jpg,90"
+                            },
+                            {
+                                "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/nCTUX1iX5bIUBBWtF9CuaV/3b96.jpeg?fl=res,500,400,3|shr,,20|jpg,90"
+                            },
+                            {
+                                "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/nCTUX1iX5bIUBBWtF9CuaV/3b96.jpeg?fl=res,500,400,3|shr,,20|jpg,90"
+                            }
+                        ]
+                    },
+                    "date_construct_completion": "01.04.2028",
+                    "date_sale": "21.08.2025",
+                    "seo": "SMICHOV-CITY-SEVER-II-ETAPA",
+                    "advert_images_count": 4,
+                    "annotation": "Blok SM8 navazuje na ji\u017e realizovan\u00e9 reziden\u010dn\u00ed bloky SM2 a SM3 a zahrnuje celkem 12 bytov\u00fdch dom\u016f. Je sou\u010d\u00e1st\u00ed projektu Sm\u00edchov City, jeho\u017e z\u00e1m\u011brem je nab\u00eddnout obyvatel\u016fm modern\u00ed bydlen\u00ed s vysok\u00fdm standardem proveden\u00ed.",
+                    "gps": {
+                        "lat": 50.067713,
+                        "lon": 14.4054384
+                    }
+                }
+            ]
+        },
+        "favourite": {
+            "is_favourite": false,
+            "_links": {
+                "self": {
+                    "href": "/cs/v2/favourite/2581394252"
+                }
+            }
+        },
+        "calculator": null,
+        "seller": {
+            "specialization_string": "",
+            "user_id": 14683,
+            "specialization": {
+                "category": [
+                    {
+                        "category_main_cb": 1,
+                        "num": 46
+                    }
+                ],
+                "type": [
+                    {
+                        "num": 46,
+                        "category_type_cb": 1
+                    }
+                ]
+            },
+            "broker_video": {},
+            "phones": [
+                {
+                    "code": "420",
+                    "type": "MOB",
+                    "number": "800304050"
+                }
+            ],
+            "image": "https://d18-a.sdn.cz/d_18/c_img_p9_B/nCTUX1iX5CGpNZCzMGAtk6n/96b9.jpeg",
+            "broker_ico": 0,
+            "image_dynamic": "https://d18-a.sdn.cz/d_18/c_img_p9_B/nCTUX1iX5CGpNZCzMGAtk6n/96b9.jpeg?fl=res,{width},{height},3|shr,,20|jpg,90",
+            "active": true,
+            "offers": [],
+            "_links": {
+                "self": {
+                    "profile": "/seller/1/doc",
+                    "href": "/cs/v2/seller/14683"
+                }
+            },
+            "user_name": "Jan Mahdal",
+            "certificates": [],
+            "broker_tip_description": "",
+            "_embedded": {
+                "premise": {
+                    "www": "https://sekyragroup.cz",
+                    "phones": [
+                        {
+                            "code": "420",
+                            "type": "TEL",
+                            "number": "234005551"
+                        },
+                        {
+                            "code": "420",
+                            "type": "TEL",
+                            "number": "800304050"
+                        },
+                        {
+                            "code": "420",
+                            "type": "TEL",
+                            "number": "800411111"
+                        }
+                    ],
+                    "poi_logo": "",
+                    "logo": "https://d48-a.sdn.cz/d_48/c_img_QI_g/RYpNU.png?fl=res,140,140,3,ffffff",
+                    "company_subject_id": 2129831,
+                    "id": 3360,
+                    "ico": 63998611,
+                    "locality": {
+                        "lat": 50.0970854929,
+                        "lon": 14.460144265
+                    },
+                    "company_id": 1708,
+                    "allow_calculator": 1,
+                    "logo_small": "https://d48-a.sdn.cz/d_48/c_img_QI_g/RYpNU.png?fl=res,70,70,1,ffffff",
+                    "seznam_naplno": 1,
+                    "_links": {
+                        "self": {
+                            "profile": "/companies/1/doc",
+                            "href": "/cs/v2/companies/3360"
+                        }
+                    },
+                    "retargeting_id": 0,
+                    "email": "info@sekyragroup.cz",
+                    "description": "Od roku 1996 se zab\u00fdv\u00e1me realizov\u00e1n\u00edm projekt\u016f pro reziden\u010dn\u00ed (Rohan City, Sm\u00edchov City, BelariePark, Rezidence Korunn\u00ed, Rezidence \u010cakovice) i komer\u010dn\u00ed vyu\u017eit\u00ed (T-Mobile, Nestle, NTK, \u010cesk\u00e1 spo\u0159itelna).",
+                    "address": "Rohansk\u00e9 n\u00e1b\u0159e\u017e\u00ed 721/39, 18600 Praha - Karl\u00edn",
+                    "ask": {
+                        "opening_time_visible": true,
+                        "phones": [
+                            {
+                                "role": "Telefon",
+                                "number": "234005551",
+                                "country_code": "420"
+                            },
+                            {
+                                "role": "Zelen\u00e1 linka",
+                                "number": "800304050",
+                                "country_code": "420"
+                            },
+                            {
+                                "role": "Zelen\u00e1 linka",
+                                "number": "800411111",
+                                "country_code": "420"
+                            },
+                            {
+                                "role": "Mobil",
+                                "number": "736510296",
+                                "country_code": "420"
+                            }
+                        ],
+                        "addr_street": "Rohansk\u00e9 n\u00e1b\u0159e\u017e\u00ed",
+                        "address": "Rohansk\u00e9 n\u00e1b\u0159e\u017e\u00ed 721/39, 186 00  Praha, Karl\u00edn",
+                        "pie": [
+                            {
+                                "category_main_cb": 1,
+                                "num": 46
+                            }
+                        ],
+                        "opening_time_additional_info": "Prohl\u00eddky byt\u016f kdykoliv po telefonick\u00e9 domluv\u011b.\nBezplatn\u00e1 linka: 800 411 111\nEmail: prodej@sekyragroup.cz",
+                        "opening_time_st": [
+                            {
+                                "amStart": {
+                                    "hour": 8,
+                                    "minute": 0
+                                },
+                                "relative_sort": 4,
+                                "specification_id": "open",
+                                "amEnd": {
+                                    "hour": 16,
+                                    "minute": 0
+                                },
+                                "additional_info": "Prohl\u00eddky byt\u016f kdykoliv po telefonick\u00e9 domluv\u011b.\nBezplatn\u00e1 linka: 800 411 111\nEmail: prodej@sekyragroup.cz",
+                                "exception_id": "",
+                                "date": "2026-03-23",
+                                "day": "monday",
+                                "nonstop": false
+                            },
+                            {
+                                "amStart": {
+                                    "hour": 8,
+                                    "minute": 0
+                                },
+                                "relative_sort": 5,
+                                "specification_id": "open",
+                                "amEnd": {
+                                    "hour": 16,
+                                    "minute": 0
+                                },
+                                "additional_info": "Prohl\u00eddky byt\u016f kdykoliv po telefonick\u00e9 domluv\u011b.\nBezplatn\u00e1 linka: 800 411 111\nEmail: prodej@sekyragroup.cz",
+                                "exception_id": "",
+                                "date": "2026-03-24",
+                                "day": "tuesday",
+                                "nonstop": false
+                            },
+                            {
+                                "amStart": {
+                                    "hour": 8,
+                                    "minute": 0
+                                },
+                                "relative_sort": 6,
+                                "specification_id": "open",
+                                "amEnd": {
+                                    "hour": 16,
+                                    "minute": 0
+                                },
+                                "additional_info": "Prohl\u00eddky byt\u016f kdykoliv po telefonick\u00e9 domluv\u011b.\nBezplatn\u00e1 linka: 800 411 111\nEmail: prodej@sekyragroup.cz",
+                                "exception_id": "",
+                                "date": "2026-03-25",
+                                "day": "wednesday",
+                                "nonstop": false
+                            },
+                            {
+                                "amStart": {
+                                    "hour": 8,
+                                    "minute": 0
+                                },
+                                "relative_sort": 0,
+                                "specification_id": "open",
+                                "amEnd": {
+                                    "hour": 16,
+                                    "minute": 0
+                                },
+                                "additional_info": "Prohl\u00eddky byt\u016f kdykoliv po telefonick\u00e9 domluv\u011b.\nBezplatn\u00e1 linka: 800 411 111\nEmail: prodej@sekyragroup.cz",
+                                "exception_id": "",
+                                "date": "2026-03-19",
+                                "day": "thursday",
+                                "nonstop": false
+                            },
+                            {
+                                "amStart": {
+                                    "hour": 8,
+                                    "minute": 0
+                                },
+                                "relative_sort": 1,
+                                "specification_id": "open",
+                                "amEnd": {
+                                    "hour": 16,
+                                    "minute": 0
+                                },
+                                "additional_info": "Prohl\u00eddky byt\u016f kdykoliv po telefonick\u00e9 domluv\u011b.\nBezplatn\u00e1 linka: 800 411 111\nEmail: prodej@sekyragroup.cz",
+                                "exception_id": "",
+                                "date": "2026-03-20",
+                                "day": "friday",
+                                "nonstop": false
+                            },
+                            {
+                                "relative_sort": 2,
+                                "exception_id": "",
+                                "day": "saturday",
+                                "specification_id": "closed",
+                                "date": "2026-03-21",
+                                "additional_info": "Prohl\u00eddky byt\u016f kdykoliv po telefonick\u00e9 domluv\u011b.\nBezplatn\u00e1 linka: 800 411 111\nEmail: prodej@sekyragroup.cz",
+                                "nonstop": false
+                            },
+                            {
+                                "relative_sort": 3,
+                                "exception_id": "",
+                                "day": "sunday",
+                                "specification_id": "closed",
+                                "date": "2026-03-22",
+                                "additional_info": "Prohl\u00eddky byt\u016f kdykoliv po telefonick\u00e9 domluv\u011b.\nBezplatn\u00e1 linka: 800 411 111\nEmail: prodej@sekyragroup.cz",
+                                "nonstop": false
+                            }
+                        ],
+                        "photos_url": [],
+                        "partners": [
+                            {
+                                "title": "ForGolf Media",
+                                "seo_name": "forgolf-media-praha-vinohrady",
+                                "id": "12869952",
+                                "logos_url": [
+                                    {
+                                        "medium": "https://d48-a.sdn.cz/d_48/c_img_G_C/5ADq8B.png?fl=res,120,120,1,ffffff",
+                                        "description": {
+                                            "source": "firmy_adminweb",
+                                            "type": "logo",
+                                            "id": 1024376,
+                                            "metadata": {
+                                                "size": [
+                                                    140,
+                                                    140
+                                                ]
+                                            }
+                                        },
+                                        "form": "https://d48-a.sdn.cz/d_48/c_img_G_C/5ADq8B.png",
+                                        "big": "https://d48-a.sdn.cz/d_48/c_img_G_C/5ADq8B.png?fl=res,140,140,3,ffffff",
+                                        "small": "https://d48-a.sdn.cz/d_48/c_img_G_C/5ADq8B.png?fl=res,70,70,1,ffffff",
+                                        "email": "https://d48-a.sdn.cz/d_48/c_img_G_C/5ADq8B.png",
+                                        "orig": "https://d48-a.sdn.cz/d_48/c_img_G_C/5ADq8B.png"
+                                    }
+                                ]
+                            }
+                        ],
+                        "review_count": 0,
+                        "firmy_review_url": "https://www.firmy.cz/detail/481160-sekyra-group-praha-karlin.html#pridat-hodnoceni",
+                        "emails": [
+                            {
+                                "role": "E-mail",
+                                "email": "info@sekyragroup.cz"
+                            },
+                            {
+                                "role": "Prodejna",
+                                "email": "prodej@sekyragroup.cz"
+                            }
+                        ],
+                        "offers": [],
+                        "stars": -1.0,
+                        "opening_time": [
+                            "0,08:00,16:00,,",
+                            "0,08:00,16:00,,",
+                            "0,08:00,16:00,,",
+                            "0,08:00,16:00,,",
+                            "0,08:00,16:00,,",
+                            "0,,,,",
+                            "0,,,,"
+                        ],
+                        "email": "info@sekyragroup.cz",
+                        "opening_time_today": 3,
+                        "description": "Od roku 1996 se zab\u00fdv\u00e1me realizov\u00e1n\u00edm projekt\u016f pro reziden\u010dn\u00ed (Rohan City, Sm\u00edchov City, BelariePark, Rezidence Korunn\u00ed, Rezidence \u010cakovice) i komer\u010dn\u00ed vyu\u017eit\u00ed (T-Mobile, Nestle, NTK, \u010cesk\u00e1 spo\u0159itelna).",
+                        "photos_premise_url": [
+                            {
+                                "full": "https://d48-a.sdn.cz/d_48/c_img_p8_A/kBfrbpoeND2I1YDvuFqzTb2/8487.jpeg?fl=res,600,400,3,ffffff",
+                                "description": {
+                                    "rus_id": 81344372,
+                                    "visits": 224188,
+                                    "source": "mapy_userweb",
+                                    "date": "2026-02-03T11:56:37",
+                                    "type": "mphoto",
+                                    "id": 12510378,
+                                    "metadata": {
+                                        "name": "Administrativn\u00ed budova - Arch\u00e9",
+                                        "take_date": null,
+                                        "mark": {
+                                            "lat": 50.0970854929,
+                                            "lon": 14.460144265
+                                        },
+                                        "ratios": {},
+                                        "mark_camera": null,
+                                        "rotation": 0,
+                                        "size": [
+                                            2000,
+                                            1263
+                                        ]
+                                    }
+                                },
+                                "hintGallery": "https://d48-a.sdn.cz/d_48/c_img_p8_A/kBfrbpoeND2I1YDvuFqzTb2/8487.jpeg?fl=res,1200,900,1",
+                                "big": "https://d48-a.sdn.cz/d_48/c_img_p8_A/kBfrbpoeND2I1YDvuFqzTb2/8487.jpeg",
+                                "half": "https://d48-a.sdn.cz/d_48/c_img_p8_A/kBfrbpoeND2I1YDvuFqzTb2/8487.jpeg?fl=res,300,200,3,ffffff",
+                                "list": "https://d48-a.sdn.cz/d_48/c_img_p8_A/kBfrbpoeND2I1YDvuFqzTb2/8487.jpeg?fl=res,220,147,3,ffffff",
+                                "mapcircle": "https://d48-a.sdn.cz/d_48/c_img_p8_A/kBfrbpoeND2I1YDvuFqzTb2/8487.jpeg?fl=res,59,59,3,ffffff",
+                                "hintThumbMedium": "https://d48-a.sdn.cz/d_48/c_img_p8_A/kBfrbpoeND2I1YDvuFqzTb2/8487.jpeg?fl=res,600,400,3",
+                                "small": "https://d48-a.sdn.cz/d_48/c_img_p8_A/kBfrbpoeND2I1YDvuFqzTb2/8487.jpeg?fl=res,112,84,1,ffffff",
+                                "medium": "https://d48-a.sdn.cz/d_48/c_img_p8_A/kBfrbpoeND2I1YDvuFqzTb2/8487.jpeg?fl=res,600,450,1,ffffff",
+                                "noborder": "https://d48-a.sdn.cz/d_48/c_img_p8_A/kBfrbpoeND2I1YDvuFqzTb2/8487.jpeg?fl=res,600,450,3,ffffff",
+                                "hintThumbSmall": "https://d48-a.sdn.cz/d_48/c_img_p8_A/kBfrbpoeND2I1YDvuFqzTb2/8487.jpeg?fl=res,300,200,3",
+                                "gallery": "https://d48-a.sdn.cz/d_48/c_img_p8_A/kBfrbpoeND2I1YDvuFqzTb2/8487.jpeg?fl=res,250,167,3,ffffff",
+                                "orig": "https://d48-a.sdn.cz/d_48/c_img_p8_A/kBfrbpoeND2I1YDvuFqzTb2/8487.jpeg"
+                            }
+                        ],
+                        "opening_time_next_week": [
+                            {
+                                "amStart": {
+                                    "hour": 8,
+                                    "minute": 0
+                                },
+                                "relative_sort": 4,
+                                "specification_id": "open",
+                                "amEnd": {
+                                    "hour": 16,
+                                    "minute": 0
+                                },
+                                "additional_info": "Prohl\u00eddky byt\u016f kdykoliv po telefonick\u00e9 domluv\u011b.\nBezplatn\u00e1 linka: 800 411 111\nEmail: prodej@sekyragroup.cz",
+                                "exception_id": "",
+                                "date": "2026-03-30",
+                                "day": "monday",
+                                "nonstop": false
+                            },
+                            {
+                                "amStart": {
+                                    "hour": 8,
+                                    "minute": 0
+                                },
+                                "relative_sort": 5,
+                                "specification_id": "open",
+                                "amEnd": {
+                                    "hour": 16,
+                                    "minute": 0
+                                },
+                                "additional_info": "Prohl\u00eddky byt\u016f kdykoliv po telefonick\u00e9 domluv\u011b.\nBezplatn\u00e1 linka: 800 411 111\nEmail: prodej@sekyragroup.cz",
+                                "exception_id": "",
+                                "date": "2026-03-31",
+                                "day": "tuesday",
+                                "nonstop": false
+                            },
+                            {
+                                "amStart": {
+                                    "hour": 8,
+                                    "minute": 0
+                                },
+                                "relative_sort": 6,
+                                "specification_id": "open",
+                                "amEnd": {
+                                    "hour": 16,
+                                    "minute": 0
+                                },
+                                "additional_info": "Prohl\u00eddky byt\u016f kdykoliv po telefonick\u00e9 domluv\u011b.\nBezplatn\u00e1 linka: 800 411 111\nEmail: prodej@sekyragroup.cz",
+                                "exception_id": "",
+                                "date": "2026-04-01",
+                                "day": "wednesday",
+                                "nonstop": false
+                            },
+                            {
+                                "amStart": {
+                                    "hour": 8,
+                                    "minute": 0
+                                },
+                                "relative_sort": 0,
+                                "specification_id": "open",
+                                "amEnd": {
+                                    "hour": 16,
+                                    "minute": 0
+                                },
+                                "additional_info": "Prohl\u00eddky byt\u016f kdykoliv po telefonick\u00e9 domluv\u011b.\nBezplatn\u00e1 linka: 800 411 111\nEmail: prodej@sekyragroup.cz",
+                                "exception_id": "",
+                                "date": "2026-03-26",
+                                "day": "thursday",
+                                "nonstop": false
+                            },
+                            {
+                                "amStart": {
+                                    "hour": 8,
+                                    "minute": 0
+                                },
+                                "relative_sort": 1,
+                                "specification_id": "open",
+                                "amEnd": {
+                                    "hour": 16,
+                                    "minute": 0
+                                },
+                                "additional_info": "Prohl\u00eddky byt\u016f kdykoliv po telefonick\u00e9 domluv\u011b.\nBezplatn\u00e1 linka: 800 411 111\nEmail: prodej@sekyragroup.cz",
+                                "exception_id": "",
+                                "date": "2026-03-27",
+                                "day": "friday",
+                                "nonstop": false
+                            },
+                            {
+                                "relative_sort": 2,
+                                "exception_id": "",
+                                "day": "saturday",
+                                "specification_id": "closed",
+                                "date": "2026-03-28",
+                                "additional_info": "Prohl\u00eddky byt\u016f kdykoliv po telefonick\u00e9 domluv\u011b.\nBezplatn\u00e1 linka: 800 411 111\nEmail: prodej@sekyragroup.cz",
+                                "nonstop": false
+                            },
+                            {
+                                "relative_sort": 3,
+                                "exception_id": "",
+                                "day": "sunday",
+                                "specification_id": "closed",
+                                "date": "2026-03-29",
+                                "additional_info": "Prohl\u00eddky byt\u016f kdykoliv po telefonick\u00e9 domluv\u011b.\nBezplatn\u00e1 linka: 800 411 111\nEmail: prodej@sekyragroup.cz",
+                                "nonstop": false
+                            }
+                        ],
+                        "addr_city": "Praha, Karl\u00edn",
+                        "opening_time_today_date": "2026-03-19",
+                        "is_paid": true,
+                        "addr_zip": "18600",
+                        "opening_time_description": "Otev\u00edrac\u00ed hodiny",
+                        "addr_house_num": "721/39"
+                    },
+                    "name": "Sekyra Group",
+                    "url": "Sekyra-Group-Praha-Karlin",
+                    "ask_id": 481160,
+                    "company_paid_firmy": 1,
+                    "www_visible": "https://sekyragroup.cz"
+                }
+            },
+            "in_banner_seller": false,
+            "email": "prodej@sekyragroup.cz",
+            "ask": {}
+        },
+        "note": {
+            "note": "",
+            "_links": {
+                "self": {
+                    "href": "/cs/v2/note/2581394252"
+                }
+            },
+            "has_note": false
+        },
+        "images": [
+            {
+                "kind": 2,
+                "_links": {
+                    "dynamicDown": {
+                        "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/nCTUX1iX5CFdAHBaeF9CgTg/3f43.jpeg?fl=res,{width},{height},3|shr,,20|jpg,90"
+                    },
+                    "gallery": {
+                        "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/nCTUX1iX5CFdAHBaeF9CgTg/3f43.jpeg?fl=res,221,166,3|shr,,20|jpg,90"
+                    },
+                    "self": {
+                        "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/nCTUX1iX5CFdAHBaeF9CgTg/3f43.jpeg?fl=res,1920,1080,1|wrm,/watermark/sreality.png,10|shr,,20|jpg,90"
+                    },
+                    "dynamicUp": {
+                        "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/nCTUX1iX5CFdAHBaeF9CgTg/3f43.jpeg?fl=res,{width},{height},3|wrm,/watermark/sreality.png,10|shr,,20|jpg,90"
+                    },
+                    "view": {
+                        "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/nCTUX1iX5CFdAHBaeF9CgTg/3f43.jpeg?fl=res,749,562,3|shr,,20|jpg,90"
+                    }
+                },
+                "id": 969708622,
+                "order": 1
+            },
+            {
+                "kind": 4,
+                "_links": {
+                    "dynamicDown": {
+                        "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/kcHp2YdDtJj1UBKLF9CgUR/afc8.jpeg?fl=res,{width},{height},3|shr,,20|jpg,90"
+                    },
+                    "gallery": {
+                        "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/kcHp2YdDtJj1UBKLF9CgUR/afc8.jpeg?fl=res,221,166,3|shr,,20|jpg,90"
+                    },
+                    "self": {
+                        "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/kcHp2YdDtJj1UBKLF9CgUR/afc8.jpeg?fl=res,1920,1080,1|wrm,/watermark/sreality.png,10|shr,,20|jpg,90"
+                    },
+                    "dynamicUp": {
+                        "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/kcHp2YdDtJj1UBKLF9CgUR/afc8.jpeg?fl=res,{width},{height},3|wrm,/watermark/sreality.png,10|shr,,20|jpg,90"
+                    },
+                    "view": {
+                        "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/kcHp2YdDtJj1UBKLF9CgUR/afc8.jpeg?fl=res,749,562,3|shr,,20|jpg,90"
+                    }
+                },
+                "id": 970187305,
+                "order": 4
+            },
+            {
+                "kind": 2,
+                "_links": {
+                    "dynamicDown": {
+                        "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/nCTUX1iX5CoHumBYgF9CgVB/4970.jpeg?fl=res,{width},{height},3|shr,,20|jpg,90"
+                    },
+                    "gallery": {
+                        "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/nCTUX1iX5CoHumBYgF9CgVB/4970.jpeg?fl=res,221,166,3|shr,,20|jpg,90"
+                    },
+                    "self": {
+                        "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/nCTUX1iX5CoHumBYgF9CgVB/4970.jpeg?fl=res,1920,1080,1|wrm,/watermark/sreality.png,10|shr,,20|jpg,90"
+                    },
+                    "dynamicUp": {
+                        "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/nCTUX1iX5CoHumBYgF9CgVB/4970.jpeg?fl=res,{width},{height},3|wrm,/watermark/sreality.png,10|shr,,20|jpg,90"
+                    },
+                    "view": {
+                        "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/nCTUX1iX5CoHumBYgF9CgVB/4970.jpeg?fl=res,749,562,3|shr,,20|jpg,90"
+                    }
+                },
+                "id": 953802964,
+                "order": 5
+            },
+            {
+                "kind": 2,
+                "_links": {
+                    "dynamicDown": {
+                        "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/nCTUX1iX5CDciVBfdF9CgVp/08d3.jpeg?fl=res,{width},{height},3|shr,,20|jpg,90"
+                    },
+                    "gallery": {
+                        "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/nCTUX1iX5CDciVBfdF9CgVp/08d3.jpeg?fl=res,221,166,3|shr,,20|jpg,90"
+                    },
+                    "self": {
+                        "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/nCTUX1iX5CDciVBfdF9CgVp/08d3.jpeg?fl=res,1920,1080,1|wrm,/watermark/sreality.png,10|shr,,20|jpg,90"
+                    },
+                    "dynamicUp": {
+                        "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/nCTUX1iX5CDciVBfdF9CgVp/08d3.jpeg?fl=res,{width},{height},3|wrm,/watermark/sreality.png,10|shr,,20|jpg,90"
+                    },
+                    "view": {
+                        "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/nCTUX1iX5CDciVBfdF9CgVp/08d3.jpeg?fl=res,749,562,3|shr,,20|jpg,90"
+                    }
+                },
+                "id": 953802961,
+                "order": 6
+            },
+            {
+                "kind": 2,
+                "_links": {
+                    "dynamicDown": {
+                        "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/kcHp2YdDtJj1UBKLF9CgWS/3785.jpeg?fl=res,{width},{height},3|shr,,20|jpg,90"
+                    },
+                    "gallery": {
+                        "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/kcHp2YdDtJj1UBKLF9CgWS/3785.jpeg?fl=res,221,166,3|shr,,20|jpg,90"
+                    },
+                    "self": {
+                        "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/kcHp2YdDtJj1UBKLF9CgWS/3785.jpeg?fl=res,1920,1080,1|wrm,/watermark/sreality.png,10|shr,,20|jpg,90",
+                        "title": "Smichov City_ext_SM08_cam03"
+                    },
+                    "dynamicUp": {
+                        "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/kcHp2YdDtJj1UBKLF9CgWS/3785.jpeg?fl=res,{width},{height},3|wrm,/watermark/sreality.png,10|shr,,20|jpg,90"
+                    },
+                    "view": {
+                        "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/kcHp2YdDtJj1UBKLF9CgWS/3785.jpeg?fl=res,749,562,3|shr,,20|jpg,90"
+                    }
+                },
+                "id": 969708634,
+                "order": 7
+            },
+            {
+                "kind": 2,
+                "_links": {
+                    "dynamicDown": {
+                        "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/kcHp2YdDtCDcb579F9CgXA/9c35.jpeg?fl=res,{width},{height},3|shr,,20|jpg,90"
+                    },
+                    "gallery": {
+                        "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/kcHp2YdDtCDcb579F9CgXA/9c35.jpeg?fl=res,221,166,3|shr,,20|jpg,90"
+                    },
+                    "self": {
+                        "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/kcHp2YdDtCDcb579F9CgXA/9c35.jpeg?fl=res,1920,1080,1|wrm,/watermark/sreality.png,10|shr,,20|jpg,90"
+                    },
+                    "dynamicUp": {
+                        "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/kcHp2YdDtCDcb579F9CgXA/9c35.jpeg?fl=res,{width},{height},3|wrm,/watermark/sreality.png,10|shr,,20|jpg,90"
+                    },
+                    "view": {
+                        "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/kcHp2YdDtCDcb579F9CgXA/9c35.jpeg?fl=res,749,562,3|shr,,20|jpg,90"
+                    }
+                },
+                "id": 970187308,
+                "order": 8
+            },
+            {
+                "kind": 2,
+                "_links": {
+                    "dynamicDown": {
+                        "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/nCTUX1iX5CNPfpBv0F9CgXp/5fc8.jpeg?fl=res,{width},{height},3|shr,,20|jpg,90"
+                    },
+                    "gallery": {
+                        "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/nCTUX1iX5CNPfpBv0F9CgXp/5fc8.jpeg?fl=res,221,166,3|shr,,20|jpg,90"
+                    },
+                    "self": {
+                        "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/nCTUX1iX5CNPfpBv0F9CgXp/5fc8.jpeg?fl=res,1920,1080,1|wrm,/watermark/sreality.png,10|shr,,20|jpg,90"
+                    },
+                    "dynamicUp": {
+                        "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/nCTUX1iX5CNPfpBv0F9CgXp/5fc8.jpeg?fl=res,{width},{height},3|wrm,/watermark/sreality.png,10|shr,,20|jpg,90"
+                    },
+                    "view": {
+                        "href": "https://d18-a.sdn.cz/d_18/c_img_p9_A/nCTUX1iX5CNPfpBv0F9CgXp/5fc8.jpeg?fl=res,749,562,3|shr,,20|jpg,90"
+                    }
+                },
+                "id": 970187311,
+                "order": 9
+            }
+        ],
+        "matterport_url": ""
+    },
+    "locality": {
+        "name": "Adresa",
+        "value": "\u0160iklov\u00e9, Praha",
+        "accuracy": "not_address"
+    },
+    "panorama": 0,
+    "poi_leisure_time": {
+        "url": "https://mapy.cz/zakladni?x=14.4055314158&y=50.067232877&z=16&q=volny%20%C4%8Das",
+        "values": [
+            {
+                "distance": 460.0,
+                "rating": -1,
+                "description": "Multifunk\u010dn\u00ed h\u0159i\u0161t\u011b Ar\u00e9na sportu",
+                "walkDistance": 607,
+                "index": 1,
+                "url": "https://mapy.cz/zakladni?x=14.410780157802549&y=50.069641266015076&z=17&source=base&id=2554231",
+                "lines": [],
+                "lon": 14.410780157802549,
+                "source": "base",
+                "source_id": 2554231,
+                "time": 546,
+                "lat": 50.069641266015076,
+                "review_count": 0,
+                "photo_url": "https://d34-a.sdn.cz/d_34/c_img_oY_A/kBkJRwehYDsMiMjKC2DitI/51f7.jpeg?fl=rot,270,0%7Cres,{width},{height},3",
+                "imgUrl": "https://api.mapy.cz/poiimg/icon/144",
+                "name": "Sportovi\u0161t\u011b"
+            },
+            {
+                "distance": 483.0,
+                "rating": -1,
+                "description": "T\u011blocvi\u010dn\u00e1 jednota Sokol - Sm\u00edchov II",
+                "index": 2,
+                "url": "https://www.firmy.cz/detail/1946970-telocvicna-jednota-sokol-smichov-ii-praha-smichov.html",
+                "lines": [],
+                "lon": 14.407879829406738,
+                "source": "firm",
+                "source_id": 1946970,
+                "lat": 50.07130813598633,
+                "review_count": 0,
+                "photo_url": "//d48-a.sdn.cz/d_48/c_img_G_C/t5AUip.jpeg?fl=res,{width},{height},3",
+                "imgUrl": "https://api.mapy.cz/poiimg/icon/144",
+                "name": "Sportovi\u0161t\u011b"
+            },
+            {
+                "distance": 486.0,
+                "rating": 5,
+                "description": "Bowling Sm\u00edchov & Garage Billiards",
+                "index": 3,
+                "url": "https://www.firmy.cz/detail/13203867-bowling-smichov-garage-billiards-praha-smichov.html",
+                "lines": [],
+                "lon": 14.405912399291992,
+                "source": "firm",
+                "source_id": 13203867,
+                "lat": 50.07159423828125,
+                "review_count": 100,
+                "photo_url": "//d48-a.sdn.cz/d_48/c_img_p9_A/kY1K2LlXQB7HUzGKcF7Si9r/fd2b.jpeg?fl=res,{width},{height},3",
+                "imgUrl": "https://api.mapy.cz/poiimg/icon/31",
+                "name": "Sportovi\u0161t\u011b"
+            },
+            {
+                "distance": 534.0,
+                "rating": 4,
+                "description": "CineStar And\u011bl",
+                "index": 1,
+                "url": "https://www.firmy.cz/detail/2537565-cinestar-andel-praha-smichov.html",
+                "lines": [],
+                "lon": 14.401565551757812,
+                "source": "firm",
+                "source_id": 2537565,
+                "lat": 50.07130432128906,
+                "review_count": 85,
+                "photo_url": "//d48-a.sdn.cz/d_48/c_img_G_C/h4aBxEP.jpeg?fl=res,{width},{height},3",
+                "imgUrl": "https://api.mapy.cz/poiimg/icon/62",
+                "name": "Kino"
+            },
+            {
+                "distance": 590.0,
+                "rating": -1,
+                "description": "TODAY Fitness pro \u017eeny And\u011bl",
+                "index": 4,
+                "url": "https://www.firmy.cz/detail/13922268-today-fitness-pro-zeny-andel-praha-smichov.html",
+                "lines": [],
+                "lon": 14.400779724121094,
+                "source": "firm",
+                "source_id": 13922268,
+                "lat": 50.07157897949219,
+                "review_count": 0,
+                "photo_url": "//d48-a.sdn.cz/d_48/c_img_og_A/kOzkBkwYBTqAqfISfFRqWpI/df05.jpeg?fl=res,{width},{height},3",
+                "imgUrl": "https://api.mapy.cz/poiimg/icon/144",
+                "name": "Sportovi\u0161t\u011b"
+            }
+        ],
+        "name": "Voln\u00fd \u010das"
+    },
+    "_links": {
+        "similar_adverts": {
+            "href": "/cs/v2/estates?category_main_cb=1&locality_district_id=47&category_sub_cb=10&category_type_cb=1",
+            "title": "Prodej byt\u016f 5+kk"
+        },
+        "self": {
+            "profile": "/estates/1/doc",
+            "href": "/cs/v2/estates/2581394252",
+            "title": "Detail inzeratu"
+        },
+        "local_search": {
+            "href": "/cs/v2/estates?category_main_cb=1&region=Praha&region_entity_type=osmm&category_type_cb=1",
+            "title": "Prodej byt\u016f Praha"
+        },
+        "broader_search": {
+            "href": "/cs/v2/estates?category_main_cb=1&locality_district_id=47&category_type_cb=1",
+            "title": "Prodej byt\u016f"
+        }
+    },
+    "poi_school_kindergarten": {
+        "url": "https://www.firmy.cz/Instituce-a-urady/Vzdelavaci-instituce?x=14.4055314158&y=50.067232877&rt=adresa",
+        "values": [
+            {
+                "distance": 243.0,
+                "rating": 5,
+                "description": "Mate\u0159sk\u00e1 \u0161kola, Praha 5 - Sm\u00edchov, U \u017delezni\u010dn\u00edho mostu 2629",
+                "walkDistance": 327,
+                "index": 1,
+                "url": "https://www.firmy.cz/detail/617142-materska-skola-praha-5-smichov-u-zeleznicniho-mostu-2629-praha-smichov.html",
+                "lines": [],
+                "lon": 14.408772468566895,
+                "source": "firm",
+                "source_id": 617142,
+                "time": 294,
+                "lat": 50.06655502319336,
+                "review_count": 2,
+                "photo_url": "//d48-a.sdn.cz/d_48/c_img_oV_A/nPt0vAiT3tDecN9UpCA6ojE/9645.jpeg?fl=res,{width},{height},3",
+                "imgUrl": "https://api.mapy.cz/poiimg/icon/412",
+                "name": "\u0160kolka"
+            },
+            {
+                "distance": 243.0,
+                "rating": -1,
+                "description": "Ivana Svobodov\u00e1",
+                "index": 2,
+                "url": "https://www.firmy.cz/detail/2348381-ivana-svobodova-praha-smichov.html",
+                "lines": [],
+                "lon": 14.408772468566895,
+                "source": "firm",
+                "source_id": 2348381,
+                "lat": 50.06655502319336,
+                "review_count": 0,
+                "photo_url": "//d48-a.sdn.cz/d_48/c_img_oV_A/nPt0vAiT3tDecN9UpCA6ojE/9645.jpeg?fl=res,{width},{height},3",
+                "imgUrl": "https://api.mapy.cz/poiimg/icon/412",
+                "name": "\u0160kolka"
+            },
+            {
+                "distance": 500.0,
+                "rating": 4,
+                "description": "Z\u00e1kladn\u00ed \u0161kola a mate\u0159sk\u00e1 \u0161kola Praha 5 - Sm\u00edchov, U Santo\u0161ky 1/1007",
+                "walkDistance": 817,
+                "index": 1,
+                "url": "https://www.firmy.cz/detail/401396-zakladni-skola-a-materska-skola-praha-5-smichov-u-santosky-1-1007-praha-smichov.html",
+                "lines": [],
+                "lon": 14.398818016052246,
+                "source": "firm",
+                "source_id": 401396,
+                "time": 979,
+                "lat": 50.06593704223633,
+                "review_count": 2,
+                "photo_url": "//d48-a.sdn.cz/d_48/c_img_G_C/f2L9q.jpeg?fl=res,{width},{height},3",
+                "imgUrl": "https://api.mapy.cz/poiimg/icon/142",
+                "name": "\u0160kola"
+            },
+            {
+                "distance": 581.0,
+                "rating": -1,
+                "description": "Z\u00e1kladn\u00ed \u0161kola a mate\u0159sk\u00e1 \u0161kola Praha 5 - Sm\u00edchov, U Santo\u0161ky 1/1007",
+                "index": 3,
+                "url": "https://www.firmy.cz/detail/401438-zakladni-skola-a-materska-skola-praha-5-smichov-u-santosky-1-1007-praha-smichov.html",
+                "lines": [],
+                "lon": 14.398478507995605,
+                "source": "firm",
+                "source_id": 401438,
+                "lat": 50.06461715698242,
+                "review_count": 0,
+                "photo_url": "//d48-a.sdn.cz/d_48/c_img_oc_A/nPvSisOTaMsSOlW8ECmD7U/2ad4.jpeg?fl=res,{width},{height},3",
+                "imgUrl": "https://api.mapy.cz/poiimg/icon/412",
+                "name": "\u0160kolka"
+            },
+            {
+                "distance": 587.0,
+                "rating": 5,
+                "description": "Obchodn\u00ed institut",
+                "index": 2,
+                "url": "https://www.firmy.cz/detail/272001-obchodni-institut-praha-smichov.html",
+                "lines": [],
+                "lon": 14.397370338439941,
+                "source": "firm",
+                "source_id": 272001,
+                "lat": 50.06789779663086,
+                "review_count": 1,
+                "photo_url": "//d48-a.sdn.cz/d_48/c_img_H_D/PgFB2Oa.jpeg?fl=res,{width},{height},3",
+                "imgUrl": "https://api.mapy.cz/poiimg/icon/142",
+                "name": "\u0160kola"
+            }
+        ],
+        "name": "\u0160koly a \u0161kolky"
+    },
+    "logged_in": false,
+    "is_topped_today": true,
+    "map": {
+        "geometry": [
+            {
+                "type": "linestring",
+                "data": [
+                    [
+                        50.067136213121174,
+                        14.403950140583536
+                    ],
+                    [
+                        50.0672294682469,
+                        14.405473442999037
+                    ],
+                    [
+                        50.06723636471931,
+                        14.405590731257938
+                    ],
+                    [
+                        50.06724515275654,
+                        14.40572616112756
+                    ],
+                    [
+                        50.067330490547356,
+                        14.407112631906086
+                    ]
+                ]
+            }
+        ],
+        "lon": 14.4055314158074,
+        "zoom": 15,
+        "bounding_box": {
+            "leftBottomBounding": {
+                "lat": 50.067136213121174,
+                "lon": 14.403950140583536
+            },
+            "rightTopBounding": {
+                "lat": 50.067330490547356,
+                "lon": 14.407112631906086
+            }
+        },
+        "lat": 50.0672328770099,
+        "type": "geometry"
+    },
+    "recommendations_data": {
+        "category_main_cb": 1,
+        "furnished": 2,
+        "object_type": 0,
+        "parking_lots": 1,
+        "price_summary_unit_cb": 1,
+        "locality_street_id": 5199535,
+        "terrace": 1,
+        "balcony": 0,
+        "locality_district_id": 47,
+        "locality_ward_id": -1,
+        "loggia": 0,
+        "category_sub_cb": 10,
+        "building_type": 6,
+        "elevator": 1,
+        "locality_gps_lat": 50.0672328770099,
+        "basin": 0,
+        "locality_region_id": 10,
+        "category_type_cb": 1,
+        "hash_id": 2581394252,
+        "cellar": 1,
+        "object_kind": 0,
+        "locality_gps_lon": 14.4055314158074,
+        "usable_area": 210,
+        "locality_quarter_id": -1,
+        "ownership": 1,
+        "locality_municipality_id": 3468,
+        "low_energy": 1,
+        "easy_access": 1,
+        "building_condition": 6,
+        "locality_country_id": 112,
+        "garage": 0,
+        "room_count_cb": 0,
+        "energy_efficiency_rating_cb": 2,
+        "price_summary_czk": 57992960
+    },
+    "poi_transport": {
+        "url": "https://mapy.cz/zakladni?x=14.4055314158&y=50.067232877&z=16&q=zast%C3%A1vky",
+        "values": [
+            {
+                "distance": 105.0,
+                "rating": -1,
+                "description": "Na Kn\u00ed\u017eec\u00ed",
+                "walkDistance": 132,
+                "index": 1,
+                "url": "https://mapy.cz/zakladni?x=14.406961&y=50.067467&z=17&source=pubt&id=25201076",
+                "lines": [
+                    {
+                        "poi_id": 25201076,
+                        "terminus": "S\u00eddli\u0161t\u011b Barrandov",
+                        "line_label": "10",
+                        "departure_direction": -1,
+                        "line_id": "L10",
+                        "type": "tram"
+                    },
+                    {
+                        "poi_id": 25201076,
+                        "terminus": "S\u00eddli\u0161t\u011b Barrandov",
+                        "line_label": "12",
+                        "departure_direction": -1,
+                        "line_id": "L12",
+                        "type": "tram"
+                    },
+                    {
+                        "poi_id": 25201076,
+                        "terminus": "Hlubo\u010depy",
+                        "line_label": "16",
+                        "departure_direction": -1,
+                        "line_id": "L16",
+                        "type": "tram"
+                    },
+                    {
+                        "poi_id": 25201076,
+                        "terminus": "S\u00eddli\u0161t\u011b Barrandov",
+                        "line_label": "20",
+                        "departure_direction": -1,
+                        "line_id": "L20",
+                        "type": "tram"
+                    },
+                    {
+                        "poi_id": 25201076,
+                        "terminus": "Slivenec",
+                        "line_label": "4",
+                        "departure_direction": -1,
+                        "line_id": "L4",
+                        "type": "tram"
+                    },
+                    {
+                        "poi_id": 25201076,
+                        "terminus": "Slivenec",
+                        "line_label": "5",
+                        "departure_direction": -1,
+                        "line_id": "L5",
+                        "type": "tram"
+                    },
+                    {
+                        "poi_id": 25201076,
+                        "terminus": "Plze\u0148ka",
+                        "line_label": "9",
+                        "departure_direction": -1,
+                        "line_id": "L9",
+                        "type": "tram"
+                    },
+                    {
+                        "poi_id": 25201076,
+                        "terminus": "Slivenec",
+                        "line_label": "94",
+                        "departure_direction": 1,
+                        "line_id": "L94",
+                        "type": "tram"
+                    },
+                    {
+                        "poi_id": 25201076,
+                        "terminus": "Skalka",
+                        "line_label": "901",
+                        "departure_direction": 1,
+                        "line_id": "L901",
+                        "type": "bus"
+                    },
+                    {
+                        "poi_id": 25201076,
+                        "terminus": "Ban\u011b",
+                        "line_label": "907",
+                        "departure_direction": 1,
+                        "line_id": "L907",
+                        "type": "bus"
+                    }
+                ],
+                "lon": 14.406961,
+                "source": "pubt",
+                "source_id": 25201076,
+                "time": 118,
+                "lat": 50.067467,
+                "review_count": 0,
+                "photo_url": "https://d34-a.sdn.cz/d_34/c_img_oe_A/nO1Ur3YPjBC0ZD7VHEkXmtX/5294.jpeg?fl=res,{width},{height},3",
+                "imgUrl": "https://api.mapy.cz/poiimg/icon/155",
+                "name": "Tram"
+            },
+            {
+                "distance": 142.0,
+                "rating": -1,
+                "description": "Na Kn\u00ed\u017eec\u00ed",
+                "index": 2,
+                "url": "https://mapy.cz/zakladni?x=14.405079&y=50.068474&z=17&source=pubt&id=25201931",
+                "lines": [],
+                "lon": 14.405079,
+                "source": "pubt",
+                "source_id": 25201931,
+                "lat": 50.068474,
+                "review_count": 0,
+                "photo_url": "https://d18-a.sdn.cz/d_18/c_img_p9_B/kcHp2YdDtEDuRmEUQGDfsi8/515b.jpeg?fl=res,300,300,3|shr,,20|jpg,90",
+                "imgUrl": "https://api.mapy.cz/poiimg/icon/155",
+                "name": "Tram"
+            },
+            {
+                "distance": 145.0,
+                "rating": -1,
+                "description": "Na Kn\u00ed\u017eec\u00ed",
+                "index": 3,
+                "url": "https://mapy.cz/zakladni?x=14.404680139&y=50.0684135141&z=17&source=pubt&id=15304015",
+                "lines": [],
+                "lon": 14.404680139,
+                "source": "pubt",
+                "source_id": 15304015,
+                "lat": 50.0684135141,
+                "review_count": 0,
+                "photo_url": "https://d18-a.sdn.cz/d_18/c_img_p9_B/kcHp2YdDtCDcb5DHsGDfsjp/b64e.jpeg?fl=res,300,300,3|shr,,20|jpg,90",
+                "imgUrl": "https://api.mapy.cz/poiimg/icon/155",
+                "name": "Tram"
+            },
+            {
+                "distance": 159.0,
+                "rating": -1,
+                "description": "Na Kn\u00ed\u017eec\u00ed",
+                "index": 4,
+                "url": "https://mapy.cz/zakladni?x=14.4064831028&y=50.068522805&z=17&source=pubt&id=15301375",
+                "lines": [
+                    {
+                        "poi_id": 15301375,
+                        "terminus": "Hercovka",
+                        "line_label": "10",
+                        "departure_direction": 1,
+                        "line_id": "L10",
+                        "type": "tram"
+                    },
+                    {
+                        "poi_id": 15301375,
+                        "terminus": "Lehovec",
+                        "line_label": "12",
+                        "departure_direction": 1,
+                        "line_id": "L12",
+                        "type": "tram"
+                    },
+                    {
+                        "poi_id": 15301375,
+                        "terminus": "\u00dast\u0159edn\u00ed d\u00edlny DP",
+                        "line_label": "16",
+                        "departure_direction": 1,
+                        "line_id": "L16",
+                        "type": "tram"
+                    },
+                    {
+                        "poi_id": 15301375,
+                        "terminus": "D\u011bdina",
+                        "line_label": "20",
+                        "departure_direction": 1,
+                        "line_id": "L20",
+                        "type": "tram"
+                    },
+                    {
+                        "poi_id": 15301375,
+                        "terminus": "Kub\u00e1nsk\u00e9 n\u00e1m\u011bst\u00ed",
+                        "line_label": "4",
+                        "departure_direction": 1,
+                        "line_id": "L4",
+                        "type": "tram"
+                    },
+                    {
+                        "poi_id": 15301375,
+                        "terminus": "Vozovna \u017di\u017ekov",
+                        "line_label": "5",
+                        "departure_direction": 1,
+                        "line_id": "L5",
+                        "type": "tram"
+                    },
+                    {
+                        "poi_id": 15301375,
+                        "terminus": "Spojovac\u00ed",
+                        "line_label": "9",
+                        "departure_direction": 1,
+                        "line_id": "L9",
+                        "type": "tram"
+                    },
+                    {
+                        "poi_id": 15301375,
+                        "terminus": "Lehovec",
+                        "line_label": "94",
+                        "departure_direction": -1,
+                        "line_id": "L94",
+                        "type": "tram"
+                    },
+                    {
+                        "poi_id": 15301375,
+                        "terminus": "And\u011bl",
+                        "line_label": "901",
+                        "departure_direction": -1,
+                        "line_id": "L901",
+                        "type": "bus"
+                    },
+                    {
+                        "poi_id": 15301375,
+                        "terminus": "Praha, Leti\u0161t\u011b",
+                        "line_label": "907",
+                        "departure_direction": -1,
+                        "line_id": "L907",
+                        "type": "bus"
+                    }
+                ],
+                "lon": 14.4064831028,
+                "source": "pubt",
+                "source_id": 15301375,
+                "lat": 50.068522805,
+                "review_count": 0,
+                "photo_url": "https://d34-a.sdn.cz/d_34/c_img_gS_j/oJnOE2.jpeg?fl=res,{width},{height},3",
+                "imgUrl": "https://api.mapy.cz/poiimg/icon/155",
+                "name": "Tram"
+            },
+            {
+                "distance": 160.0,
+                "rating": -1,
+                "description": "And\u011bl",
+                "walkDistance": 230,
+                "index": 1,
+                "url": "https://mapy.cz/zakladni?x=14.4041297511&y=50.0683523312&z=17&source=pubt&id=15200241",
+                "lines": [],
+                "lon": 14.4041297511,
+                "source": "pubt",
+                "source_id": 15200241,
+                "time": 221,
+                "lat": 50.0683523312,
+                "review_count": 0,
+                "photo_url": "https://d34-a.sdn.cz/d_34/c_img_QK_q/Ai7BOc.jpeg?fl=res,{width},{height},3",
+                "imgUrl": "https://api.mapy.cz/poiimg/icon/262",
+                "name": "Metro"
+            }
+        ],
+        "name": "Doprava"
+    },
+    "price_czk": {
+        "unit": "",
+        "name": "Celkov\u00e1 cena",
+        "value": "57\u00a0992\u00a0960",
+        "value_raw": 57992960
+    },
+    "rus": false,
+    "name": {
+        "name": "N\u00e1zev",
+        "value": "Prodej bytu 5+kk 210\u00a0m\u00b2"
+    },
+    "poi_grocery": {
+        "url": "https://www.firmy.cz/Obchody-a-obchudky/Prodejci-potravin?x=14.4055314158&y=50.067232877&rt=adresa",
+        "values": [
+            {
+                "distance": 556.0,
+                "rating": 3,
+                "description": "Potraviny Lidick\u00e1",
+                "index": 1,
+                "url": "https://www.firmy.cz/detail/2469177-potraviny-lidicka-praha-smichov.html",
+                "lines": [],
+                "lon": 14.40475845336914,
+                "source": "firm",
+                "source_id": 2469177,
+                "lat": 50.072208404541016,
+                "review_count": 1,
+                "photo_url": "//d48-a.sdn.cz/d_48/c_img_p8_A/nPVpfd5QLLbHLYBtEFxWX4i/04c8.jpeg?fl=res,{width},{height},3",
+                "imgUrl": "https://api.mapy.cz/poiimg/icon/423",
+                "name": "Ve\u010derka"
+            },
+            {
+                "distance": 634.0,
+                "rating": 3,
+                "description": "Tesco",
+                "walkDistance": 731,
+                "index": 1,
+                "url": "https://www.firmy.cz/detail/733908-tesco-praha-smichov.html",
+                "lines": [],
+                "lon": 14.401899337768555,
+                "source": "firm",
+                "source_id": 733908,
+                "time": 692,
+                "lat": 50.07243347167969,
+                "review_count": 48,
+                "photo_url": "//d48-a.sdn.cz/d_48/c_img_p9_A/kY1K2LlXQJGqrCmHF7r03V/72b5.png?fl=res,{width},{height},3",
+                "imgUrl": "https://api.mapy.cz/poiimg/icon/101",
+                "name": "Obchod"
+            },
+            {
+                "distance": 674.0,
+                "rating": 4,
+                "description": "Obchodn\u00ed centrum Nov\u00fd Sm\u00edchov",
+                "index": 2,
+                "url": "https://www.firmy.cz/detail/579116-obchodni-centrum-novy-smichov-praha-smichov.html",
+                "lines": [],
+                "lon": 14.401925086975098,
+                "source": "firm",
+                "source_id": 579116,
+                "lat": 50.07283020019531,
+                "review_count": 276,
+                "photo_url": "//d48-a.sdn.cz/d_48/c_img_QI_u/MgWqmA.jpeg?fl=cro,0,198,1334,413|res,{width},{height},3",
+                "imgUrl": "https://api.mapy.cz/poiimg/icon/419",
+                "name": "Obchod"
+            },
+            {
+                "distance": 765.0,
+                "rating": 2,
+                "description": "PONT to go",
+                "index": 2,
+                "url": "https://www.firmy.cz/detail/1327742-pont-to-go-praha-smichov.html",
+                "lines": [],
+                "lon": 14.408689498901367,
+                "source": "firm",
+                "source_id": 1327742,
+                "lat": 50.0606575012207,
+                "review_count": 5,
+                "photo_url": "//d48-a.sdn.cz/d_48/c_img_p7_A/nPXMbbUsvqECACpDnzFmscNg/2901.jpeg?fl=res,{width},{height},3",
+                "imgUrl": "https://api.mapy.cz/poiimg/icon/423",
+                "name": "Ve\u010derka"
+            },
+            {
+                "distance": 853.0,
+                "rating": 5,
+                "description": "Tesco Expres",
+                "index": 3,
+                "url": "https://www.firmy.cz/detail/12750705-tesco-expres-praha-nove-mesto.html",
+                "lines": [],
+                "lon": 14.41742992401123,
+                "source": "firm",
+                "source_id": 12750705,
+                "lat": 50.06794738769531,
+                "review_count": 1,
+                "photo_url": "//d48-a.sdn.cz/d_48/c_img_H_D/De6BFwy.jpeg?fl=res,{width},{height},3",
+                "imgUrl": "https://api.mapy.cz/poiimg/icon/423",
+                "name": "Ve\u010derka"
+            }
+        ],
+        "name": "Potraviny"
+    },
+    "poi_restaurant": {
+        "url": "https://www.firmy.cz/Restauracni-a-pohostinske-sluzby?x=14.4055314158&y=50.067232877&rt=adresa",
+        "values": [
+            {
+                "distance": 121.0,
+                "rating": 3,
+                "description": "Restaurant & Music Club Dog\u00b4s Bollocks",
+                "walkDistance": 130,
+                "index": 1,
+                "url": "https://www.firmy.cz/detail/328360-restaurant-music-club-dog-s-bollocks-praha-smichov.html",
+                "lines": [],
+                "lon": 14.407177925109863,
+                "source": "firm",
+                "source_id": 328360,
+                "time": 117,
+                "lat": 50.06749725341797,
+                "review_count": 6,
+                "photo_url": "//d48-a.sdn.cz/d_48/c_img_QK_M/VKyOY.jpeg?fl=res,{width},{height},3",
+                "imgUrl": "https://api.mapy.cz/poiimg/icon/133",
+                "name": "Restaurace"
+            },
+            {
+                "distance": 122.0,
+                "rating": 4,
+                "description": "El Barrio de \u00c1ngel",
+                "index": 2,
+                "url": "https://www.firmy.cz/detail/747423-el-barrio-de-angel-praha-smichov.html",
+                "lines": [],
+                "lon": 14.407045364379883,
+                "source": "firm",
+                "source_id": 747423,
+                "lat": 50.06774139404297,
+                "review_count": 16,
+                "photo_url": "//d48-a.sdn.cz/d_48/c_img_oV_A/nPt0vAiT3tDcIi9XACBSYH6/443b.jpeg?fl=res,{width},{height},3",
+                "imgUrl": "https://api.mapy.cz/poiimg/icon/133",
+                "name": "Restaurace"
+            },
+            {
+                "distance": 227.0,
+                "rating": -1,
+                "description": "Restaurace Akcent",
+                "index": 3,
+                "url": "https://www.firmy.cz/detail/13936114-restaurace-akcent-praha-smichov.html",
+                "lines": [],
+                "lon": 14.403162002563477,
+                "source": "firm",
+                "source_id": 13936114,
+                "lat": 50.06859588623047,
+                "review_count": 0,
+                "photo_url": "//d48-a.sdn.cz/d_48/c_img_H_D/W8UUQf.jpeg?fl=res,{width},{height},3",
+                "imgUrl": "https://api.mapy.cz/poiimg/icon/133",
+                "name": "Restaurace"
+            },
+            {
+                "distance": 345.0,
+                "rating": 4,
+                "description": "Hosp\u016fdka Knofl\u00edk",
+                "index": 1,
+                "url": "https://www.firmy.cz/detail/2253647-hospudka-knoflik-praha-smichov.html",
+                "lines": [],
+                "lon": 14.404561996459961,
+                "source": "firm",
+                "source_id": 2253647,
+                "lat": 50.070274353027344,
+                "review_count": 8,
+                "photo_url": "//d48-a.sdn.cz/d_48/c_img_G_C/4hQUQO.jpeg?fl=res,{width},{height},3",
+                "imgUrl": "https://api.mapy.cz/poiimg/icon/362",
+                "name": "Hospoda"
+            },
+            {
+                "distance": 378.0,
+                "rating": 4,
+                "description": "Restaurace Formanka Original 1869",
+                "index": 4,
+                "url": "https://www.firmy.cz/detail/331771-restaurace-formanka-original-1869-praha-smichov.html",
+                "lines": [],
+                "lon": 14.400860786437988,
+                "source": "firm",
+                "source_id": 331771,
+                "lat": 50.06884002685547,
+                "review_count": 62,
+                "photo_url": "//d48-a.sdn.cz/d_48/c_img_G_C/HreBFOX.jpeg?fl=res,{width},{height},3",
+                "imgUrl": "https://api.mapy.cz/poiimg/icon/133",
+                "name": "Restaurace"
+            }
+        ],
+        "name": "Restaurace"
+    },
+    "items": [
+        {
+            "negotiation": false,
+            "name": "Celkov\u00e1 cena",
+            "notes": [],
+            "value": "57\u00a0992\u00a0960",
+            "currency": "K\u010d",
+            "type": "price_czk",
+            "unit": "za nemovitost"
+        },
+        {
+            "type": "string",
+            "name": "Pozn\u00e1mka k cen\u011b",
+            "value": "Uveden\u00e1 cena je v\u010detn\u011b DPH, sklepa, bez parkovac\u00edho st\u00e1n\u00ed"
+        },
+        {
+            "type": "string",
+            "name": "ID zak\u00e1zky",
+            "value": "03.7.1"
+        },
+        {
+            "type": "edited",
+            "name": "Aktualizace",
+            "value": "Dnes",
+            "topped": true
+        },
+        {
+            "type": "string",
+            "name": "Stavba",
+            "value": "Skeletov\u00e1"
+        },
+        {
+            "type": "string",
+            "name": "Stav objektu",
+            "value": "Novostavba"
+        },
+        {
+            "type": "string",
+            "name": "Vlastnictv\u00ed",
+            "value": "Osobn\u00ed"
+        },
+        {
+            "type": "string",
+            "name": "Um\u00edst\u011bn\u00ed objektu",
+            "value": "Centrum obce"
+        },
+        {
+            "type": "string",
+            "name": "Podla\u017e\u00ed",
+            "value": "7. podla\u017e\u00ed z celkem 7 v\u010detn\u011b 3 podzemn\u00edch"
+        },
+        {
+            "unit": "m2",
+            "type": "area",
+            "name": "U\u017eitn\u00e1 ploch",
+            "value": "210"
+        },
+        {
+            "unit": "m2",
+            "type": "area",
+            "name": "Terasa",
+            "value": "115"
+        },
+        {
+            "unit": "m2",
+            "type": "area",
+            "name": "Sklep",
+            "value": "4"
+        },
+        {
+            "type": "count",
+            "name": "Parkov\u00e1n\u00ed",
+            "value": "4"
+        },
+        {
+            "type": "set",
+            "name": "Telekomunikace",
+            "value": [
+                {
+                    "name": "Telekomunikace",
+                    "value": "Internet"
+                }
+            ]
+        },
+        {
+            "type": "set",
+            "name": "Elekt\u0159ina",
+            "value": [
+                {
+                    "name": "Elekt\u0159ina",
+                    "value": "230V"
+                }
+            ]
+        },
+        {
+            "value_type": "B",
+            "type": "energy_efficiency_rating",
+            "name": "Energetick\u00e1 n\u00e1ro\u010dnost budovy",
+            "value": "T\u0159\u00edda B - Velmi \u00fasporn\u00e1 \u010d. 264/2020 Sb. podle vyhl\u00e1\u0161ky"
+        },
+        {
+            "unit2": "za rok",
+            "unit": "kWh/m^2",
+            "type": "energy_performance",
+            "name": "Ukazatel energetick\u00e9 n\u00e1ro\u010dnosti budovy",
+            "value": "50,0"
+        },
+        {
+            "type": "boolean",
+            "name": "Bezbari\u00e9rov\u00fd",
+            "value": true
+        },
+        {
+            "type": "boolean",
+            "name": "Vybaven\u00ed",
+            "value": false
+        },
+        {
+            "type": "boolean",
+            "name": "V\u00fdtah",
+            "value": true
+        }
+    ],
+    "is_topped": true,
+    "locality_district_id": 47
+}

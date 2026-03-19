@@ -1,25 +1,13 @@
-version: "3.9"
-
-# ──────────────────────────────────────────────────────────────────
-# Networks
-# ──────────────────────────────────────────────────────────────────
 networks:
   scraper-net:
     driver: bridge
 
-# ──────────────────────────────────────────────────────────────────
-# Named volumes
-# ──────────────────────────────────────────────────────────────────
 volumes:
-  mongo-data:          # persistent MongoDB data
-  scraper-logs:        # persistent application logs
+  mongo-data:
+  scraper-logs:
 
-# ──────────────────────────────────────────────────────────────────
-# Services
-# ──────────────────────────────────────────────────────────────────
 services:
 
-  # ── MongoDB ────────────────────────────────────────────────────
   mongodb:
     image: mongo:7.0
     container_name: sreality-mongodb
@@ -30,10 +18,9 @@ services:
       MONGO_INITDB_DATABASE: ${MONGO_DATABASE:-sreality}
     volumes:
       - mongo-data:/data/db
-      - ./mongo-init:/docker-entrypoint-initdb.d:ro   # init scripts
+      - ./mongo-init:/docker-entrypoint-initdb.d:ro
     networks:
       - scraper-net
-    # Expose port only on localhost – do NOT expose publicly on VPS
     ports:
       - "127.0.0.1:27017:27017"
     healthcheck:
@@ -43,26 +30,29 @@ services:
       retries: 5
       start_period: 20s
 
-  # ── Java Scraper ───────────────────────────────────────────────
   scraper:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: sreality-scraper
-    restart: unless-stopped
+    restart: "no"   # stateless — run once per cron trigger, do not auto-restart
     depends_on:
       mongodb:
-        condition: service_healthy   # wait until Mongo is ready
+        condition: service_healthy
     env_file:
-      - .env                         # real secrets (git-ignored)
+      - .env
     environment:
-      MONGO_HOST: mongodb            # hostname = service name on the shared network
+      MONGO_HOST: mongodb
       MONGO_PORT: 27017
       MONGO_DATABASE: ${MONGO_DATABASE:-sreality}
       MONGO_USERNAME: ${MONGO_USERNAME:-scraper}
       MONGO_PASSWORD: ${MONGO_PASSWORD:-changeme}
+      SREALITY_BASE_URL: ${SREALITY_BASE_URL:-https://www.sreality.cz/api/cs/v2/estates}
+      PER_PAGE: ${PER_PAGE:-100}
+      MAX_ESTATES: ${MAX_ESTATES:-0}
+      HTTP_CONNECT_TIMEOUT_MS: ${HTTP_CONNECT_TIMEOUT_MS:-10000}
+      HTTP_READ_TIMEOUT_MS: ${HTTP_READ_TIMEOUT_MS:-30000}
     volumes:
       - scraper-logs:/app/logs
     networks:
       - scraper-net
-    # No ports needed – scraper only talks outbound (sreality) and to mongo
