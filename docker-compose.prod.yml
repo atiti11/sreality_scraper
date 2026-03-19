@@ -1,0 +1,32 @@
+# docker-compose.prod.yml
+# Apply on top of docker-compose.yml on the VPS:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# This file only overrides production-specific settings.
+
+version: "3.9"
+
+services:
+
+  mongodb:
+    # Pin to a specific patch version for reproducibility in production
+    image: mongo:7.0.12
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+
+  scraper:
+    # Pull a pre-built image from a registry instead of building on the VPS
+    # Uncomment and set your registry when you have one:
+    # image: ghcr.io/youruser/sreality-scraper:latest
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    # Override logging driver to keep container logs manageable
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
