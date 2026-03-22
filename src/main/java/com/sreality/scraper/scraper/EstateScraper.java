@@ -49,9 +49,12 @@ public class EstateScraper {
     private final int[]              categoryMainCbs;
     private final int[]              categoryTypeCbs;
 
-    /** Production constructor — scrapes all 15 category combinations with 300ms delay. */
+    // Set after run() completes — accessible via getLastReport()
+    private ScrapeRunReport lastReport;
+
+    /** Production constructor — scrapes all 15 category combinations with configurable delay. */
     public EstateScraper(AppConfig config, SrealityHttpClient http, MongoRepository mongo) {
-        this(config, http, mongo, DEFAULT_CATEGORY_MAIN_CBS, DEFAULT_CATEGORY_TYPE_CBS, 300L);
+        this(config, http, mongo, DEFAULT_CATEGORY_MAIN_CBS, DEFAULT_CATEGORY_TYPE_CBS, config.requestDelayMs);
     }
 
     /** Test constructor — allows restricting categories and setting delay to 0 for speed. */
@@ -106,7 +109,13 @@ public class EstateScraper {
             log.error("Failed to save scrape run report to MongoDB: {}", e.getMessage());
         }
 
+        this.lastReport = report;
         log.info("=== Scrape run finished ===");
+    }
+
+    /** Returns the report from the most recent run(), or null if run() hasn't been called yet. */
+    public ScrapeRunReport getLastReport() {
+        return lastReport;
     }
 
     // -------------------------------------------------------------------------
@@ -326,14 +335,14 @@ public class EstateScraper {
         log.info("╔══════════════════════════════════════╗");
         log.info("║           SCRAPE SUMMARY             ║");
         log.info("╠══════════════════════════════════════╣");
-        log.info("║  Processed:      {:>8}            ║", report.totalProcessed);
-        log.info("║  Upserted:       {:>8}            ║", report.totalUpserted);
-        log.info("║  Skipped:        {:>8}            ║", report.totalSkipped);
-        log.info("║  Gone (410):     {:>8}            ║", report.totalGone);
-        log.info("║  Half-success:   {:>8}            ║", report.totalHalfSuccess);
-        log.info("║  Repaired:       {:>8}            ║", report.totalRepaired);
-        log.info("║  Listing errors: {:>8}            ║", report.totalListingErrors);
-        log.info("║  Total errors:   {:>8}            ║", report.totalErrors());
+        log.info(String.format("║  Processed:      %8d            ║", report.totalProcessed));
+        log.info(String.format("║  Upserted:       %8d            ║", report.totalUpserted));
+        log.info(String.format("║  Skipped:        %8d            ║", report.totalSkipped));
+        log.info(String.format("║  Gone (410):     %8d            ║", report.totalGone));
+        log.info(String.format("║  Half-success:   %8d            ║", report.totalHalfSuccess));
+        log.info(String.format("║  Repaired:       %8d            ║", report.totalRepaired));
+        log.info(String.format("║  Listing errors: %8d            ║", report.totalListingErrors));
+        log.info(String.format("║  Total errors:   %8d            ║", report.totalErrors()));
         log.info("╚══════════════════════════════════════╝");
 
         if (report.totalGone > 0) {

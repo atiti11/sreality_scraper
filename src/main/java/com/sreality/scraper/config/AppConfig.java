@@ -22,15 +22,24 @@ public class AppConfig {
     // Development / testing limiter  (0 = no limit → scrape everything)
     public final int    maxEstates;
 
+    // Delay between HTTP requests in ms (default 500 — polite but not too slow)
+    public final long   requestDelayMs;
+
     // HTTP client timeouts (ms)
     public final int    httpConnectTimeoutMs;
     public final int    httpReadTimeoutMs;
+
+    // Telegram notifications (optional — leave blank to disable)
+    public final String telegramBotToken;
+    public final String telegramChatId;
 
     private AppConfig(
             String mongoHost, int mongoPort,
             String mongoDatabase, String mongoUsername, String mongoPassword,
             String srealityBaseUrl, int perPage, int maxEstates,
-            int httpConnectTimeoutMs, int httpReadTimeoutMs) {
+            int httpConnectTimeoutMs, int httpReadTimeoutMs,
+            String telegramBotToken, String telegramChatId,
+            long requestDelayMs) {
         this.mongoHost            = mongoHost;
         this.mongoPort            = mongoPort;
         this.mongoDatabase        = mongoDatabase;
@@ -41,6 +50,9 @@ public class AppConfig {
         this.maxEstates           = maxEstates;
         this.httpConnectTimeoutMs = httpConnectTimeoutMs;
         this.httpReadTimeoutMs    = httpReadTimeoutMs;
+        this.telegramBotToken     = telegramBotToken;
+        this.telegramChatId       = telegramChatId;
+        this.requestDelayMs       = requestDelayMs;
     }
 
     /** Factory for tests — bypasses environment variables entirely. */
@@ -52,7 +64,9 @@ public class AppConfig {
         return new AppConfig(
             mongoHost, mongoPort, mongoDatabase, mongoUsername, mongoPassword,
             srealityBaseUrl, perPage, maxEstates,
-            httpConnectTimeoutMs, httpReadTimeoutMs
+            httpConnectTimeoutMs, httpReadTimeoutMs,
+            "", "",  // Telegram disabled in tests
+            300L    // default delay for tests
         );
     }
 
@@ -67,7 +81,10 @@ public class AppConfig {
             Integer.parseInt(env("PER_PAGE",        "100")),
             Integer.parseInt(env("MAX_ESTATES",     "0")),
             Integer.parseInt(env("HTTP_CONNECT_TIMEOUT_MS", "10000")),
-            Integer.parseInt(env("HTTP_READ_TIMEOUT_MS",    "30000"))
+            Integer.parseInt(env("HTTP_READ_TIMEOUT_MS",    "30000")),
+            env("TELEGRAM_BOT_TOKEN", ""),
+            env("TELEGRAM_CHAT_ID",   ""),
+            Long.parseLong(env("REQUEST_DELAY_MS", "500"))
         );
     }
 

@@ -3,7 +3,9 @@ package com.sreality.scraper;
 import com.sreality.scraper.config.AppConfig;
 import com.sreality.scraper.db.MongoRepository;
 import com.sreality.scraper.http.SrealityHttpClient;
+import com.sreality.scraper.notify.TelegramNotifier;
 import com.sreality.scraper.scraper.EstateScraper;
+import com.sreality.scraper.scraper.ScrapeRunReport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,21 +24,27 @@ public class Main {
     private static final Logger log = LoggerFactory.getLogger(Main.class);
 
     public static void main(String[] args) {
-        AppConfig config = AppConfig.fromEnv();
+        AppConfig        config   = AppConfig.fromEnv();
+        TelegramNotifier telegram = new TelegramNotifier(config.telegramBotToken, config.telegramChatId);
+
         log.info("Starting sreality scraper with config: {}", config);
 
+        ScrapeRunReport report = null;
         try (
             SrealityHttpClient http  = new SrealityHttpClient(config);
             MongoRepository    mongo = new MongoRepository(config)
         ) {
             EstateScraper scraper = new EstateScraper(config, http, mongo);
             scraper.run();
+            report = scraper.getLastReport();
 
         } catch (Exception e) {
             log.error("Fatal error during scrape run", e);
+            if (report != null) telegram.sendReport(report);
             System.exit(1);
         }
 
+        if (report != null) telegram.sendReport(report);
         log.info("Scraper finished — exiting.");
     }
 }
