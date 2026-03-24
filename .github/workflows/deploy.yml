@@ -49,24 +49,28 @@ jobs:
             git pull origin main
 
             # Write .env safely — values arrive as env vars so special
-            # characters ($, &, ^, etc.) are never interpreted by the shell.
+            # characters are never interpreted by the shell.
+            # Docker Compose interprets $ in .env files, so we escape
+            # $ as $ in all values to ensure they are passed through literally.
+            escape_for_dotenv() { printf '%s' "$1" | sed 's/\$/\$\$/g'; }
+
             printf '%s\n' \
-              "MONGO_HOST=$MONGO_HOST" \
-              "MONGO_PORT=$MONGO_PORT" \
-              "MONGO_HOST_PORT=$MONGO_HOST_PORT" \
-              "MONGO_DATABASE=$MONGO_DATABASE" \
-              "MONGO_ROOT_USERNAME=$MONGO_ROOT_USERNAME" \
-              "MONGO_ROOT_PASSWORD=$MONGO_ROOT_PASSWORD" \
-              "MONGO_USERNAME=$MONGO_USERNAME" \
-              "MONGO_PASSWORD=$MONGO_PASSWORD" \
-              "SREALITY_BASE_URL=$SREALITY_BASE_URL" \
-              "PER_PAGE=$PER_PAGE" \
-              "MAX_ESTATES=$MAX_ESTATES" \
-              "HTTP_CONNECT_TIMEOUT_MS=$HTTP_CONNECT_TIMEOUT_MS" \
-              "HTTP_READ_TIMEOUT_MS=$HTTP_READ_TIMEOUT_MS" \
-              "REQUEST_DELAY_MS=$REQUEST_DELAY_MS" \
-              "TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN" \
-              "TELEGRAM_CHAT_ID=$TELEGRAM_CHAT_ID" \
+              "MONGO_HOST=$(escape_for_dotenv "$MONGO_HOST")" \
+              "MONGO_PORT=$(escape_for_dotenv "$MONGO_PORT")" \
+              "MONGO_HOST_PORT=$(escape_for_dotenv "$MONGO_HOST_PORT")" \
+              "MONGO_DATABASE=$(escape_for_dotenv "$MONGO_DATABASE")" \
+              "MONGO_ROOT_USERNAME=$(escape_for_dotenv "$MONGO_ROOT_USERNAME")" \
+              "MONGO_ROOT_PASSWORD=$(escape_for_dotenv "$MONGO_ROOT_PASSWORD")" \
+              "MONGO_USERNAME=$(escape_for_dotenv "$MONGO_USERNAME")" \
+              "MONGO_PASSWORD=$(escape_for_dotenv "$MONGO_PASSWORD")" \
+              "SREALITY_BASE_URL=$(escape_for_dotenv "$SREALITY_BASE_URL")" \
+              "PER_PAGE=$(escape_for_dotenv "$PER_PAGE")" \
+              "MAX_ESTATES=$(escape_for_dotenv "$MAX_ESTATES")" \
+              "HTTP_CONNECT_TIMEOUT_MS=$(escape_for_dotenv "$HTTP_CONNECT_TIMEOUT_MS")" \
+              "HTTP_READ_TIMEOUT_MS=$(escape_for_dotenv "$HTTP_READ_TIMEOUT_MS")" \
+              "REQUEST_DELAY_MS=$(escape_for_dotenv "$REQUEST_DELAY_MS")" \
+              "TELEGRAM_BOT_TOKEN=$(escape_for_dotenv "$TELEGRAM_BOT_TOKEN")" \
+              "TELEGRAM_CHAT_ID=$(escape_for_dotenv "$TELEGRAM_CHAT_ID")" \
               > .env
 
             # Rebuild scraper image and ensure MongoDB is up
