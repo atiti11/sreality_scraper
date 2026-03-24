@@ -161,6 +161,12 @@ public class EstateDocumentBuilder {
         // Used for quick queries: db.<col>.countDocuments({last_update_corrupted: true})
         doc.append("last_update_corrupted", detailNode == null);
 
+        // --- Transformation flag ---
+        // Set to false on every scrape. A separate transformation job will flip
+        // this to true once it has processed the document.
+        // Query untransformed docs: db.<col>.find({transformed: false})
+        doc.append("transformed", false);
+
         // =====================================================================
         // Detail endpoint fields (only if detail was successfully fetched)
         // =====================================================================
