@@ -1,0 +1,61 @@
+name: Deploy to server
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Pull & redeploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Write .env and redeploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -e
+            cd ${{ secrets.DEPLOY_PATH }}
+
+            # Pull latest code
+            git pull origin main
+
+            # Write .env from GitHub secrets & variables
+            cat > .env << 'EOF'
+            MONGO_HOST=${{ vars.MONGO_HOST }}
+            MONGO_PORT=${{ vars.MONGO_PORT }}
+            MONGO_DATABASE=${{ vars.MONGO_DATABASE }}
+            MONGO_ROOT_USERNAME=${{ secrets.MONGO_ROOT_USERNAME }}
+            MONGO_ROOT_PASSWORD=${{ secrets.MONGO_ROOT_PASSWORD }}
+            MONGO_USERNAME=${{ secrets.MONGO_USERNAME }}
+            MONGO_PASSWORD=${{ secrets.MONGO_PASSWORD }}
+            SREALITY_BASE_URL=${{ vars.SREALITY_BASE_URL }}
+            PER_PAGE=${{ vars.PER_PAGE }}
+            MAX_ESTATES=${{ vars.MAX_ESTATES }}
+            HTTP_CONNECT_TIMEOUT_MS=${{ vars.HTTP_CONNECT_TIMEOUT_MS }}
+            HTTP_READ_TIMEOUT_MS=${{ vars.HTTP_READ_TIMEOUT_MS }}
+            REQUEST_DELAY_MS=${{ vars.REQUEST_DELAY_MS }}
+            TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
+            TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}
+            EOF
+
+            # Rebuild scraper image and ensure MongoDB is up
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+              build --no-cache scraper
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+              up -d mongodb
+
+      - name: Notify Telegram
+        if: always()
+        run: |
+          STATUS="${{ job.status }}"
+          COMMIT="${{ github.sha }}"
+          SHORT="${COMMIT:0:7}"
+          MSG="sreality_scraper deploy: *${STATUS}* on \`${SHORT}\` by ${{ github.actor }}"
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d parse_mode="Markdown" \
+            -d text="${MSG}"
