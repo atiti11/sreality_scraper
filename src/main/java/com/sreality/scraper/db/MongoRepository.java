@@ -166,7 +166,16 @@ public class MongoRepository implements AutoCloseable {
         long   hashId = doc.getLong("hash_id");
         String now    = Instant.now().toString();
 
-        Document existing = col.find(Filters.eq("hash_id", hashId)).first();
+        // Fetch only the metadata fields needed for update logic — not the full document.
+        // Fetching the full document on every upsert was the primary cause of memory growth.
+        Document existing = col.find(Filters.eq("hash_id", hashId))
+            .projection(new Document("_first_seen_at", 1)
+                .append("_update_count", 1)
+                .append("_content_hash", 1)
+                .append("_detail_available", 1)
+                .append("last_update_corrupted", 1)
+                .append("_id", 0))
+            .first();
 
         if (existing == null) {
             // ── Brand new estate ──────────────────────────────────────────────
@@ -188,25 +197,26 @@ public class MongoRepository implements AutoCloseable {
             boolean existingWasComplete = !existingCorrupted
                 && Boolean.TRUE.equals(existing.getBoolean("_detail_available"));
 
-            // If new doc has no detail but old doc was complete → preserve detail fields
+            // If new doc has no detail but old doc was complete → fetch full doc to preserve detail fields
             if (newDocCorrupted && existingWasComplete) {
                 log.warn("Detail fetch failed for existing complete estate {} — preserving previous detail fields",
                     hashId);
-                preserveDetailFields(doc, existing);
+                Document fullExisting = col.find(Filters.eq("hash_id", hashId)).first();
+                if (fullExisting != null) preserveDetailFields(doc, fullExisting);
             }
 
             // ── History delta ─────────────────────────────────────────────────
-            // Write a history entry only when there is genuinely new information:
-            //   Case A: content hash changed (listing changed) → always write
-            //   Case B: hash same, was corrupted, now fixed    → write detail delta
-            //   Case C: hash same, was corrupted, still broken → skip (nothing new)
             boolean hashChanged      = !doc.getString("_content_hash")
                 .equals(existing.getString("_content_hash"));
             boolean corruptionFixed  = existingCorrupted && !newDocCorrupted;
 
             if (hashChanged || corruptionFixed) {
+                // Only fetch full doc when we actually need to write a history delta
                 String reason = hashChanged ? "content_changed" : "corruption_repaired";
-                writeHistoryEntry(collectionName, hashId, existing, doc, now, reason);
+                Document fullExisting = col.find(Filters.eq("hash_id", hashId)).first();
+                if (fullExisting != null) {
+                    writeHistoryEntry(collectionName, hashId, fullExisting, doc, now, reason);
+                }
             }
 
             col.replaceOne(Filters.eq("hash_id", hashId), doc, new ReplaceOptions().upsert(true));

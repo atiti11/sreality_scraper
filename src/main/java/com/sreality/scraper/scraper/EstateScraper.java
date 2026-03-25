@@ -12,8 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * Stateless scraper — fetches all estates from sreality.cz and upserts them
@@ -163,16 +162,19 @@ public class EstateScraper {
         for (int page = 1; page <= totalPages; page++) {
             if (categoryProcessed >= effectiveMax) break;
 
-            List<JsonNode> estates = fetchListingPage(
-                categoryMainCb, categoryTypeCb, page, collectionName, report);
-
-            for (JsonNode estateNode : estates) {
-                if (categoryProcessed >= effectiveMax) break;
-
-                processEstate(estateNode, collectionName, report);
-                report.totalProcessed++;
-                categoryProcessed++;
-            }
+            // Process each estate immediately and discard — do not hold the full
+            // page list in memory while processing individual estates.
+            int[] counts = {0}; // effectively final wrapper
+            fetchAndProcessListingPage(
+                categoryMainCb, categoryTypeCb, page, collectionName, report,
+                estateNode -> {
+                    if (categoryProcessed + counts[0] >= effectiveMax) return;
+                    processEstate(estateNode, collectionName, report);
+                    report.totalProcessed++;
+                    counts[0]++;
+                }
+            );
+            categoryProcessed += counts[0];
 
             log.info("Page {}/{} done — processed: {}, upserted: {}, skipped: {}, " +
                      "half-success: {}, gone: {}",
@@ -243,28 +245,34 @@ public class EstateScraper {
         return response.path("result_size").asInt(0);
     }
 
-    private List<JsonNode> fetchListingPage(int categoryMainCb, int categoryTypeCb,
+    /**
+     * Fetches one listing page and immediately passes each estate to the consumer.
+     * This avoids holding the full page (100 JsonNode objects) in memory
+     * while processing individual estates one by one.
+     */
+    private void fetchAndProcessListingPage(int categoryMainCb, int categoryTypeCb,
                                              int page, String collectionName,
-                                             ScrapeRunReport report) {
+                                             ScrapeRunReport report,
+                                             Consumer<JsonNode> estateConsumer) {
         String url = config.srealityBaseUrl
             + "?category_main_cb=" + categoryMainCb
             + "&category_type_cb=" + categoryTypeCb
             + "&locality_country_id=10001"
             + "&per_page=" + config.perPage
             + "&page=" + page;
-
-        List<JsonNode> result = new ArrayList<>();
         try {
             JsonNode response = http.get(url);
             JsonNode estates  = response.path("_embedded").path("estates");
             if (estates.isArray()) {
-                for (JsonNode estate : estates) result.add(estate);
+                for (JsonNode estate : estates) {
+                    estateConsumer.accept(estate);
+                }
             }
+            // response and estates go out of scope here and are immediately GC-eligible
         } catch (IOException e) {
             log.error("Failed to fetch listing page {}: {}", url, e.getMessage());
             report.totalListingErrors++;
         }
-        return result;
     }
 
     /**

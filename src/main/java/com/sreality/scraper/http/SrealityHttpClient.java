@@ -7,7 +7,6 @@ import org.apache.hc.client5.http.classic.methods.HttpGet;
 import org.apache.hc.client5.http.config.RequestConfig;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
-import org.apache.hc.client5.http.impl.conn.BasicHttpClientConnectionManager;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.hc.core5.util.Timeout;
 import org.slf4j.Logger;
@@ -41,14 +40,8 @@ public class SrealityHttpClient implements AutoCloseable {
             .setResponseTimeout(Timeout.of(config.httpReadTimeoutMs, TimeUnit.MILLISECONDS))
             .build();
 
-        // BasicHttpClientConnectionManager manages exactly one connection —
-        // correct for a single-threaded scraper and avoids any pooling overhead
-        // or memory accumulation from idle cached connections.
-        BasicHttpClientConnectionManager connManager = new BasicHttpClientConnectionManager();
-
         this.httpClient   = HttpClients.custom()
             .setDefaultRequestConfig(requestConfig)
-            .setConnectionManager(connManager)
             .build();
         this.objectMapper = new ObjectMapper();
     }
@@ -66,6 +59,9 @@ public class SrealityHttpClient implements AutoCloseable {
         request.setHeader("User-Agent",  USER_AGENT);
         request.setHeader("Accept",      "application/json");
         request.setHeader("Accept-Language", "cs,en;q=0.9");
+        // Close connection after each response to prevent the connection pool
+        // from accumulating buffered state over thousands of requests.
+        request.setHeader("Connection", "close");
 
         log.debug("GET {}", url);
 

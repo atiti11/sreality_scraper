@@ -65,6 +65,9 @@ public class ScrapeRunReport {
         }
     }
 
+    // Keep only the last 100 incomplete estates to cap memory usage.
+    // The full count is available via totalHalfSuccess.
+    private static final int MAX_INCOMPLETE_STORED = 100;
     public final List<IncompleteEstate> incompleteEstates = new ArrayList<>();
 
     // -------------------------------------------------------------------------
@@ -82,9 +85,13 @@ public class ScrapeRunReport {
 
     public void recordIncomplete(long hashId, String collection, String reason,
                                  int httpStatus, String errorMessage, boolean wasExisting) {
-        incompleteEstates.add(
-            new IncompleteEstate(hashId, collection, reason, httpStatus, errorMessage, wasExisting)
-        );
+        // Cap the list size to avoid unbounded memory growth over long runs.
+        // totalHalfSuccess always reflects the true count regardless.
+        if (incompleteEstates.size() < MAX_INCOMPLETE_STORED) {
+            incompleteEstates.add(
+                new IncompleteEstate(hashId, collection, reason, httpStatus, errorMessage, wasExisting)
+            );
+        }
         totalHalfSuccess++;
     }
 
