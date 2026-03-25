@@ -75,7 +75,16 @@ public class MongoRepository implements AutoCloseable {
     public MongoRepository(AppConfig config) {
         String uri = buildUri(config);
         log.info("Connecting to MongoDB at {}", config.mongoHost + ":" + config.mongoPort);
-        this.client   = MongoClients.create(uri);
+
+        // Limit connection pool to 1 — this is a single-threaded scraper.
+        // The default pool of 100 connections wastes memory with BSON buffers.
+        com.mongodb.MongoClientSettings settings = com.mongodb.MongoClientSettings.builder()
+            .applyConnectionString(new com.mongodb.ConnectionString(uri))
+            .applyToConnectionPoolSettings(builder ->
+                builder.maxSize(1).minSize(0))
+            .build();
+
+        this.client   = MongoClients.create(settings);
         this.database = client.getDatabase(config.mongoDatabase);
         log.info("Connected to database '{}'", config.mongoDatabase);
     }

@@ -182,6 +182,10 @@ public class EstateScraper {
                 report.totalProcessed, report.totalUpserted, report.totalSkipped,
                 report.totalHalfSuccess, report.totalGone);
 
+            // Hint to the GC to collect after each page — keeps memory footprint flat
+            // over long multi-hour runs processing tens of thousands of estates.
+            System.gc();
+
             sleep();
         }
 
