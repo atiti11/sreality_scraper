@@ -7,7 +7,11 @@ import org.apache.hc.client5.http.classic.methods.HttpGet;
 import org.apache.hc.client5.http.config.RequestConfig;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.client5.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
+import org.apache.hc.core5.pool.PoolConcurrencyPolicy;
+import org.apache.hc.core5.pool.PoolReusePolicy;
+import org.apache.hc.core5.util.TimeValue;
 import org.apache.hc.core5.util.Timeout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,8 +44,21 @@ public class SrealityHttpClient implements AutoCloseable {
             .setResponseTimeout(Timeout.of(config.httpReadTimeoutMs, TimeUnit.MILLISECONDS))
             .build();
 
+        // Limit connection pool to 1 connection — this is a single-threaded scraper.
+        // Evict idle/expired connections aggressively to prevent memory accumulation.
+        PoolingHttpClientConnectionManager connManager = new PoolingHttpClientConnectionManager(
+            PoolConcurrencyPolicy.STRICT,
+            PoolReusePolicy.LIFO,
+            TimeValue.ofSeconds(30)
+        );
+        connManager.setMaxTotal(1);
+        connManager.setDefaultMaxPerRoute(1);
+
         this.httpClient   = HttpClients.custom()
             .setDefaultRequestConfig(requestConfig)
+            .setConnectionManager(connManager)
+            .evictExpiredConnections()
+            .evictIdleConnections(TimeValue.ofSeconds(10))
             .build();
         this.objectMapper = new ObjectMapper();
     }
