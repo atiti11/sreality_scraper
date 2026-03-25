@@ -18,12 +18,12 @@ RUN mvn package -DskipTests -q
 # Stage 2 – Runtime
 #   Slim JRE-only image; no build tools, smaller attack surface.
 # ──────────────────────────────────────────────────────────────────
-FROM eclipse-temurin:21-jre-alpine
+FROM eclipse-temurin:21-jre-jammy
 
 WORKDIR /app
 
 # Create a non-root user for security
-RUN addgroup -S scraper && adduser -S scraper -G scraper
+RUN groupadd -r scraper && useradd -r -g scraper scraper
 
 # Copy only the shaded JAR from the build stage
 COPY --from=builder /build/target/sreality-scraper-1.0-SNAPSHOT.jar app.jar
