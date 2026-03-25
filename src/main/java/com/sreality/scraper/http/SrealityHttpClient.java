@@ -31,19 +31,16 @@ public class SrealityHttpClient implements AutoCloseable {
         "AppleWebKit/537.36 (KHTML, like Gecko) " +
         "Chrome/120.0.0.0 Safari/537.36";
 
-    private final CloseableHttpClient httpClient;
-    private final ObjectMapper        objectMapper;
+    private final RequestConfig requestConfig;
+    // ObjectMapper is thread-safe and reused, but we recreate the HTTP client
+    // per request to prevent connection pool memory accumulation.
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     public SrealityHttpClient(AppConfig config) {
-        RequestConfig requestConfig = RequestConfig.custom()
+        this.requestConfig = RequestConfig.custom()
             .setConnectTimeout(Timeout.of(config.httpConnectTimeoutMs, TimeUnit.MILLISECONDS))
             .setResponseTimeout(Timeout.of(config.httpReadTimeoutMs, TimeUnit.MILLISECONDS))
             .build();
-
-        this.httpClient   = HttpClients.custom()
-            .setDefaultRequestConfig(requestConfig)
-            .build();
-        this.objectMapper = new ObjectMapper();
     }
 
     /**
@@ -59,32 +56,37 @@ public class SrealityHttpClient implements AutoCloseable {
         request.setHeader("User-Agent",  USER_AGENT);
         request.setHeader("Accept",      "application/json");
         request.setHeader("Accept-Language", "cs,en;q=0.9");
-        // Close connection after each response to prevent the connection pool
-        // from accumulating buffered state over thousands of requests.
         request.setHeader("Connection", "close");
 
         log.debug("GET {}", url);
 
-        return httpClient.execute(request, response -> {
-            int status = response.getCode();
-            String body = EntityUtils.toString(response.getEntity(), "UTF-8");
+        // Create a fresh HTTP client per request — this ensures the connection
+        // pool and all internal buffers are fully released after each call.
+        // The performance cost is negligible given the 500ms delay between requests.
+        try (CloseableHttpClient client = HttpClients.custom()
+                .setDefaultRequestConfig(requestConfig)
+                .build()) {
+            return client.execute(request, response -> {
+                int status = response.getCode();
+                String body = EntityUtils.toString(response.getEntity(), "UTF-8");
 
-            if (status == 404 || status == 410) {
-                throw new SrealityHttpException(status, url,
-                    status == 410 ? "Gone (estate sold or removed)" : "Not found");
-            }
-            if (status != 200) {
-                throw new SrealityHttpException(status, url,
-                    "Unexpected status " + status + ": " + body.substring(0, Math.min(200, body.length())));
-            }
+                if (status == 404 || status == 410) {
+                    throw new SrealityHttpException(status, url,
+                        status == 410 ? "Gone (estate sold or removed)" : "Not found");
+                }
+                if (status != 200) {
+                    throw new SrealityHttpException(status, url,
+                        "Unexpected status " + status + ": " + body.substring(0, Math.min(200, body.length())));
+                }
 
-            return objectMapper.readTree(body);
-        });
+                return OBJECT_MAPPER.readTree(body);
+            });
+        }
     }
 
     @Override
     public void close() throws IOException {
-        httpClient.close();
+        // Nothing to close — HTTP clients are created and closed per request
     }
 
     // -------------------------------------------------------------------------
