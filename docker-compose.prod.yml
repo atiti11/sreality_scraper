@@ -23,7 +23,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256m
+          memory: 1g
     # Override logging driver to keep container logs manageable
     logging:
       driver: "json-file"
