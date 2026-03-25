@@ -22,8 +22,6 @@ services:
     # image: ghcr.io/youruser/sreality-scraper:latest
     deploy:
       resources:
-        limits:
-          memory: 512m
         reservations:
           memory: 64m
     # Override logging driver to keep container logs manageable
