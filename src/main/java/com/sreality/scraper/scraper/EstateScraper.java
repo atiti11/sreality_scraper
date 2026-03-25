@@ -156,25 +156,25 @@ public class EstateScraper {
         log.info("Total in category: {}, will process: {}, pages: {} (perPage={})",
             totalCount, effectiveMax, totalPages, config.perPage);
 
-        int categoryProcessed = 0;
+        // Use int[] so the lambda can both read and write the counter.
+        final int[] categoryProcessed = {0};
 
         // Step 2: iterate pages
         for (int page = 1; page <= totalPages; page++) {
-            if (categoryProcessed >= effectiveMax) break;
+            if (categoryProcessed[0] >= effectiveMax) break;
 
             // Process each estate immediately and discard — do not hold the full
             // page list in memory while processing individual estates.
-            int[] counts = {0}; // effectively final wrapper
+            final int effectiveMaxFinal = effectiveMax;
             fetchAndProcessListingPage(
                 categoryMainCb, categoryTypeCb, page, collectionName, report,
                 estateNode -> {
-                    if (categoryProcessed + counts[0] >= effectiveMax) return;
+                    if (categoryProcessed[0] >= effectiveMaxFinal) return;
                     processEstate(estateNode, collectionName, report);
                     report.totalProcessed++;
-                    counts[0]++;
+                    categoryProcessed[0]++;
                 }
             );
-            categoryProcessed += counts[0];
 
             log.info("Page {}/{} done — processed: {}, upserted: {}, skipped: {}, " +
                      "half-success: {}, gone: {}",
@@ -186,7 +186,7 @@ public class EstateScraper {
         }
 
         log.info("Category done: {} {} → categoryProcessed={}, totalProcessed={}",
-            propertyLabel, dealLabel, categoryProcessed, report.totalProcessed);
+            propertyLabel, dealLabel, categoryProcessed[0], report.totalProcessed);
     }
 
     // -------------------------------------------------------------------------
