@@ -98,7 +98,12 @@ public class MongoRepository implements AutoCloseable {
      */
     public boolean isUnchanged(String collectionName, long hashId, String contentHash) {
         MongoCollection<Document> col = collection(collectionName);
-        Document existing = col.find(Filters.eq("hash_id", hashId)).first();
+        // Project only the fields we need — avoids loading the full document into memory
+        Document existing = col.find(Filters.eq("hash_id", hashId))
+            .projection(new Document("_content_hash", 1)
+                .append("last_update_corrupted", 1)
+                .append("_id", 0))
+            .first();
         if (existing == null) return false;
         if (!contentHash.equals(existing.getString("_content_hash"))) return false;
         Boolean corrupted = existing.getBoolean("last_update_corrupted");
@@ -111,7 +116,10 @@ public class MongoRepository implements AutoCloseable {
      */
     public boolean exists(String collectionName, long hashId) {
         MongoCollection<Document> col = collection(collectionName);
-        return col.find(Filters.eq("hash_id", hashId)).first() != null;
+        // Project only _id to minimise data transfer
+        return col.find(Filters.eq("hash_id", hashId))
+            .projection(new Document("_id", 1))
+            .first() != null;
     }
 
     /**
@@ -123,8 +131,9 @@ public class MongoRepository implements AutoCloseable {
             Filters.and(
                 Filters.eq("hash_id", hashId),
                 Filters.eq("last_update_corrupted", true)
-            )
-        ).first() != null;
+            ))
+            .projection(new Document("_id", 1))
+            .first() != null;
     }
 
     // -------------------------------------------------------------------------
