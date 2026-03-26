@@ -26,6 +26,7 @@ services:
           memory: 64m
         limits:
           memory: 512m
+          pids: 50
     # Override logging driver to keep container logs manageable
     logging:
       driver: "json-file"

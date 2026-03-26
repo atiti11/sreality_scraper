@@ -60,4 +60,3 @@ services:
       - scraper-logs:/app/logs
     networks:
       - scraper-net
-    pids_limit: 50
