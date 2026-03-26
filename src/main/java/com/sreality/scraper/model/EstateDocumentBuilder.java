@@ -154,12 +154,21 @@ public class EstateDocumentBuilder {
         ));
 
         // --- Scrape metadata ---
-        doc.append("_scraped_at",          Instant.now().toString());
+        String now = Instant.now().toString();
+        doc.append("_scraped_at",          now);
+        doc.append("_last_seen_at",        now);  // updated on every scrape run, even skipped ones
         doc.append("_detail_available",    detailNode != null);
         // last_update_corrupted = true when the last scrape attempt stored only
         // listing data (detail failed). false = document is fully complete.
         // Used for quick queries: db.<col>.countDocuments({last_update_corrupted: true})
         doc.append("last_update_corrupted", detailNode == null);
+
+        // --- Active flag ---
+        // true = estate is currently appearing in sreality listings.
+        // Set to true on every scrape where the estate is seen.
+        // After each category run, estates not seen are marked active: false.
+        // Query inactive: db.<col>.find({active: false})
+        doc.append("active", true);
 
         // --- Transformation flag ---
         // Set to false on every scrape. A separate transformation job will flip

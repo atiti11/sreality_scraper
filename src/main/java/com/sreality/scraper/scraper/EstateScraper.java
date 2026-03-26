@@ -191,6 +191,16 @@ public class EstateScraper {
 
         log.info("Category done: {} {} → categoryProcessed={}, totalProcessed={}",
             propertyLabel, dealLabel, categoryProcessed[0], report.totalProcessed);
+
+        // Mark estates not seen in this run as inactive.
+        // Any active estate whose _last_seen_at is older than the run start
+        // did not appear in any listing page — it has been sold or removed.
+        long markedInactive = mongo.markInactiveNotSeenSince(collectionName, report.startedAt);
+        report.totalMarkedInactive += markedInactive;
+        if (markedInactive > 0) {
+            log.info("Marked {} estates as inactive in {} (not seen since run started)",
+                markedInactive, collectionName);
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -215,6 +225,8 @@ public class EstateScraper {
         if (mongo.isUnchanged(collectionName, hashId, contentHash)) {
             report.totalSkipped++;
             log.debug("Skipping estate {} — content hash unchanged and document complete", hashId);
+            // Still update _last_seen_at so we can detect estates that disappear from listings
+            mongo.touchLastSeen(collectionName, hashId);
             return;
         }
 
@@ -353,6 +365,7 @@ public class EstateScraper {
         log.info(String.format("║  Gone (410):     %8d            ║", report.totalGone));
         log.info(String.format("║  Half-success:   %8d            ║", report.totalHalfSuccess));
         log.info(String.format("║  Repaired:       %8d            ║", report.totalRepaired));
+        log.info(String.format("║  Gone inactive:  %8d            ║", report.totalMarkedInactive));
         log.info(String.format("║  Listing errors: %8d            ║", report.totalListingErrors));
         log.info(String.format("║  Total errors:   %8d            ║", report.totalErrors()));
         log.info("╚══════════════════════════════════════╝");

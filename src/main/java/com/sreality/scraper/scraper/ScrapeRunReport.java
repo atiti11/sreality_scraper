@@ -36,7 +36,8 @@ public class ScrapeRunReport {
     public int totalGone         = 0;   // HTTP 410 — sold/removed
     public int totalHalfSuccess  = 0;   // detail failed → stored listing data only
     public int totalListingErrors = 0;  // listing page fetch failures
-    public int totalRepaired     = 0;   // corruption repairs attempted (detail re-fetched)
+    public int totalRepaired       = 0;   // corruption repairs attempted (detail re-fetched)
+    public long totalMarkedInactive = 0;  // estates marked active=false (no longer in listings)
 
     // -------------------------------------------------------------------------
     // Incomplete estate records (half_success)

@@ -7,6 +7,7 @@ import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.IndexOptions;
 import com.mongodb.client.model.ReplaceOptions;
+import com.mongodb.client.model.Updates;
 import com.sreality.scraper.config.AppConfig;
 import com.sreality.scraper.scraper.ScrapeRunReport;
 import org.bson.Document;
@@ -357,8 +358,9 @@ public class MongoRepository implements AutoCloseable {
             .append("total_gone",           report.totalGone)
             .append("total_half_success",   report.totalHalfSuccess)
             .append("total_listing_errors", report.totalListingErrors)
-            .append("total_repaired",       report.totalRepaired)
-            .append("total_errors",         report.totalErrors());
+            .append("total_repaired",         report.totalRepaired)
+            .append("total_marked_inactive",   report.totalMarkedInactive)
+            .append("total_errors",            report.totalErrors());
 
         List<Document> incomplete = new ArrayList<>();
         for (ScrapeRunReport.IncompleteEstate ie : report.incompleteEstates) {
@@ -381,6 +383,37 @@ public class MongoRepository implements AutoCloseable {
         col.insertOne(runDoc);
         log.info("Scrape run report saved to 'scrape_runs' (status={}, errors={})",
             report.status, report.totalErrors());
+    }
+
+    /**
+     * Marks all estates in a collection as inactive if they were not seen
+     * since the given runStartedAt timestamp.
+     * Called after each category is fully scraped.
+     * Returns the number of estates marked inactive.
+     */
+    public long markInactiveNotSeenSince(String collectionName, String runStartedAt) {
+        MongoCollection<Document> col = collection(collectionName);
+        var result = col.updateMany(
+            Filters.and(
+                Filters.eq("active", true),
+                Filters.lt("_last_seen_at", runStartedAt)
+            ),
+            Updates.set("active", false)
+        );
+        return result.getModifiedCount();
+    }
+
+    /**
+     * Updates only _last_seen_at for an estate that was skipped (hash unchanged).
+     * This allows tracking which estates are no longer appearing in sreality results
+     * by querying: db.<col>.find({_last_seen_at: {$lt: <date>}})
+     */
+    public void touchLastSeen(String collectionName, long hashId) {
+        MongoCollection<Document> col = collection(collectionName);
+        col.updateOne(
+            Filters.eq("hash_id", hashId),
+            Updates.set("_last_seen_at", Instant.now().toString())
+        );
     }
 
     /**
@@ -449,6 +482,14 @@ public class MongoRepository implements AutoCloseable {
             col.createIndex(
                 new Document("last_update_corrupted", 1),
                 new IndexOptions().name("idx_corrupted").sparse(true)
+            );
+            col.createIndex(
+                new Document("_last_seen_at", -1),
+                new IndexOptions().name("idx_last_seen_at")
+            );
+            col.createIndex(
+                new Document("active", 1),
+                new IndexOptions().name("idx_active").sparse(true)
             );
             log.debug("Ensured indexes on collection '{}'", name);
         }
