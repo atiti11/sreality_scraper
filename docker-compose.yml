@@ -18,6 +18,8 @@ services:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-admin}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-adminpassword}
       MONGO_INITDB_DATABASE: ${MONGO_DATABASE:-sreality}
+      MONGO_USERNAME: ${MONGO_USERNAME:-scraper}
+      MONGO_PASSWORD: ${MONGO_PASSWORD:-changeme}
     volumes:
       - mongo-data:/data/db
       - ./mongo-init:/docker-entrypoint-initdb.d:ro
