@@ -24,6 +24,8 @@ services:
       resources:
         reservations:
           memory: 64m
+        limits:
+          memory: 512m
     # Override logging driver to keep container logs manageable
     logging:
       driver: "json-file"

@@ -6,6 +6,7 @@ volumes:
   mongo-data:
   scraper-logs:
 
+
 services:
 
   mongodb:
@@ -24,7 +25,7 @@ services:
     ports:
       - "127.0.0.1:${MONGO_HOST_PORT:-27018}:27017"
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      test: [ "CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -35,7 +36,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: sreality-scraper
-    restart: "no"   # stateless — run once per cron trigger, do not auto-restart
+    restart: "no" # stateless — run once per cron trigger, do not auto-restart
     depends_on:
       mongodb:
         condition: service_healthy
@@ -59,3 +60,4 @@ services:
       - scraper-logs:/app/logs
     networks:
       - scraper-net
+    pids_limit: 50

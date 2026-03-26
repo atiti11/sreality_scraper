@@ -33,8 +33,4 @@ RUN mkdir -p logs && chown -R scraper:scraper /app
 
 USER scraper
 
-# Health-check: just verify the JVM can start the JAR
-HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
-    CMD java -cp app.jar com.sreality.scraper.Main --healthcheck 2>/dev/null || exit 1
-
-ENTRYPOINT ["java", "-Xms64m", "-Xmx256m", "-XX:+UseContainerSupport", "-Xint", "-XX:+UseSerialGC", "-XX:ReservedCodeCacheSize=16m", "-XX:NativeMemoryTracking=detail", "-jar", "app.jar"]
+ENTRYPOINT ["java", "-Xms64m", "-Xmx256m", "-XX:+UseContainerSupport", "-XX:+UseSerialGC", "-XX:ReservedCodeCacheSize=16m", "-XX:+ExitOnOutOfMemoryError", "-XX:NativeMemoryTracking=detail", "-jar", "app.jar"]
