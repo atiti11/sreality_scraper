@@ -1,4 +1,4 @@
-# AGENTS.md — Sreality Scraper
+# AGENTS.md — Sreality Scraper + ETL
 
 This file is intended for AI coding agents working on this project.
 Read it fully before making any changes.
@@ -7,11 +7,15 @@ Read it fully before making any changes.
 
 ## Project Overview
 
-A Java 21 Maven application that periodically scrapes the unofficial
-sreality.cz REST API and persists real estate listings into MongoDB.
+Two Java 21 Maven applications sharing a Docker Compose stack:
 
-The scraper is **stateless** — it runs once and exits. Periodic execution
-is managed externally (cron, systemd timer, or docker restart policy).
+1. **Scraper** (`./`) — periodically scrapes sreality.cz and stores raw estate
+   documents into MongoDB (operational store).
+2. **ETL** (`./etl/`) — reads from MongoDB, joins with RUIAN geographical data
+   and CSU demographic data, and loads into a PostgreSQL data warehouse.
+
+Both are **stateless** — they run once and exit. Periodic execution is managed
+externally (cron, systemd timer, or docker restart policy).
 
 ---
 
@@ -19,311 +23,294 @@ is managed externally (cron, systemd timer, or docker restart policy).
 
 ```
 sreality_scraper/
-├── src/main/java/com/sreality/scraper/
-│   ├── Main.java                        ← entry point, wires everything, runs once
+├── src/main/java/com/sreality/scraper/   ← SCRAPER module
+│   ├── Main.java                          ← entry point
 │   ├── config/
-│   │   ├── AppConfig.java               ← all env vars + defaults
-│   │   ├── CategoryConfig.java          ← category_main_cb / category_type_cb / sub_cb → English labels + MongoDB collection names
-│   │   └── LabelConfig.java             ← property feature labels, POI labels, ownership, building type, energy rating
+│   │   ├── AppConfig.java                 ← all scraper env vars + defaults
+│   │   ├── CategoryConfig.java            ← category codes → English labels + collection names
+│   │   └── LabelConfig.java               ← property/POI labels, ownership, building, energy
 │   ├── http/
-│   │   └── SrealityHttpClient.java      ← Apache HttpClient5 wrapper (User-Agent, timeouts, SrealityHttpException)
+│   │   └── SrealityHttpClient.java        ← Apache HttpClient5 wrapper
 │   ├── db/
-│   │   └── MongoRepository.java         ← upsert by hash_id, change-detection query, auto-index on first use
+│   │   └── MongoRepository.java           ← upsert by hash_id, change detection, history
 │   ├── model/
-│   │   └── EstateDocumentBuilder.java   ← merges listing + detail JsonNodes into one MongoDB Document
+│   │   └── EstateDocumentBuilder.java     ← merges listing + detail into one MongoDB Document
 │   ├── scraper/
-│   │   ├── EstateScraper.java           ← main scrape loop over all 15 category combinations
-│   │   └── ScrapeRunReport.java         ← per-run stats + incomplete estate records, saved to scrape_runs
+│   │   ├── EstateScraper.java             ← main scrape loop over all 15 category combinations
+│   │   └── ScrapeRunReport.java           ← per-run stats, saved to scrape_runs collection
 │   └── util/
-│       ├── HashUtil.java                ← MD5(hash_id | price | name | labels) for change detection
-│       └── DateParser.java              ← parses Czech date strings ("Dnes", "Včera", "d.M.yyyy") → LocalDate
+│       ├── HashUtil.java                  ← MD5 content hash for change detection
+│       └── DateParser.java                ← Czech date strings → LocalDate
 ├── src/main/resources/
-│   └── logback.xml                      ← console + rolling file logging
+│   └── logback.xml
 ├── mongo-init/
-│   └── 01-init-scraper.js               ← creates MongoDB user + indexes on first container boot
-├── Dockerfile                           ← multi-stage: Maven build → slim JRE Alpine runtime
-├── docker-compose.yml                   ← two services: scraper + mongodb
-├── docker-compose.prod.yml              ← production overrides (resource limits, pinned image versions)
-├── pom.xml                              ← Java 21, fat JAR via maven-shade-plugin
-├── .env.example                         ← template for secrets (copy to .env)
-└── AGENTS.md                            ← this file
+│   └── 01-init-scraper.js                 ← MongoDB user + indexes on first boot
+│
+├── etl/                                   ← ETL module
+│   ├── src/main/java/com/sreality/etl/
+│   │   ├── Main.java                      ← entry point, pipeline orchestration
+│   │   ├── config/
+│   │   │   └── EtlConfig.java             ← all ETL env vars + defaults
+│   │   ├── extract/
+│   │   │   ├── MongoExtractor.java        ← streams MongoDB in configurable batches
+│   │   │   ├── RuianExtractor.java        ← downloads RUIAN GeoJSON (ArcGIS, paginated)
+│   │   │   └── CsuExtractor.java          ← downloads + parses CSU demographics CSV
+│   │   ├── transform/
+│   │   │   ├── DimensionBuilder.java      ← builds dim_* rows, joins RUIAN + CSU
+│   │   │   ├── SpatialJoiner.java         ← JTS STRtree point-in-polygon matching
+│   │   │   └── FactBuilder.java           ← builds FactSnapshot rows, SCD Type 2 logic
+│   │   ├── load/
+│   │   │   └── PostgresLoader.java        ← full DDL + upserts + SCD Type 2 + closing views
+│   │   └── model/
+│   │       ├── DimKraj.java
+│   │       ├── DimOkres.java
+│   │       ├── DimObec.java               ← carries CSU demographics
+│   │       ├── DimCastObce.java           ← carries JTS geometry (in-memory only)
+│   │       ├── DimAgency.java
+│   │       ├── DimDate.java               ← static helper, not a stored record
+│   │       ├── FactSnapshot.java          ← one row per estate state change
+│   │       ├── RawEstate.java             ← typed view over MongoDB Document
+│   │       └── EtlReport.java             ← run statistics
+│   ├── src/main/resources/
+│   │   └── logback.xml
+│   ├── Dockerfile
+│   ├── pom.xml
+│   └── README.md                          ← ETL-specific documentation
+│
+├── Dockerfile                             ← scraper multi-stage build
+├── docker-compose.yml                     ← 4 services: mongodb, scraper, postgres, etl
+├── docker-compose.prod.yml                ← production overrides
+├── pom.xml                                ← scraper Maven build
+├── .env.example                           ← template for all secrets (scraper + ETL)
+└── AGENTS.md                              ← this file
 ```
 
 ---
 
-## API Being Scraped
+## Services (docker-compose.yml)
+
+| Service | Image | Role | Restart policy |
+|---|---|---|---|
+| `mongodb` | mongo:7.0 | Operational store — scraper writes here | `unless-stopped` |
+| `scraper` | built from `./Dockerfile` | Scrapes sreality.cz → MongoDB | `"no"` — triggered by cron |
+| `postgres` | postgres:16 | Data warehouse — ETL writes here | `unless-stopped` |
+| `etl` | built from `./etl/Dockerfile` | MongoDB → PostgreSQL transform + load | `"no"` — triggered on demand |
+
+Scraper and ETL are both stateless run-once containers. Start/stop them via:
+```bash
+docker compose run --rm scraper   # run scraper once
+docker compose run --rm etl       # run ETL once
+```
+
+---
+
+## Data Warehouse Schema (PostgreSQL — schema: `dw`)
+
+### Fact tables (galaxy schema, SCD Type 2)
+| Table | Deal type | Price column |
+|---|---|---|
+| `dw.fact_sale_snapshot` | Sale | `price_asked_czk`, `price_asked_per_m2` |
+| `dw.fact_rent_snapshot` | Rent | `price_monthly_czk`, `price_monthly_per_m2` |
+| `dw.fact_auction_snapshot` | Auction | `price_starting_bid_czk` |
+
+All fact tables have `valid_from DATE` and `valid_to DATE` (NULL = current state).
+A new row is inserted only when `price` or `is_active` changes. This is SCD Type 2
+applied to the fact table itself — minimises duplicate rows while preserving full history.
+
+### Dimension tables (SCD Type 1 — always overwrite)
+| Table | Contents |
+|---|---|
+| `dw.dim_kraj` | Czech regions (14 rows) |
+| `dw.dim_okres` | Districts (77 rows) |
+| `dw.dim_obec` | Municipalities (~6,200 rows) + CSU demographics |
+| `dw.dim_cast_obce` | Parts of municipalities (~15,000 rows) |
+| `dw.dim_agency` | Real estate agencies (built incrementally) |
+| `dw.dim_date` | Date dimension (pre-generated 2024–2030) |
+
+### Derived views (live SQL — no storage, always consistent)
+| View | Source | Contents |
+|---|---|---|
+| `dw.v_sale_closing` | `fact_sale_snapshot` | Closed sale listings with price trajectory |
+| `dw.v_rent_closing` | `fact_rent_snapshot` | Closed rent listings with price trajectory |
+| `dw.v_auction_closing` | `fact_auction_snapshot` | Closed auction listings |
+
+---
+
+## API Being Scraped (scraper only)
 
 Sreality does **not** have an official public API. Everything is reverse-engineered
-from the browser's XHR traffic. Two endpoints are used:
+from browser XHR traffic. Three endpoints are used:
 
-### 1. Listing endpoint (paginated)
 ```
-GET https://www.sreality.cz/api/cs/v2/estates
-    ?category_main_cb=<1-5>
-    &category_type_cb=<1-3>
-    &locality_country_id=10001
-    &per_page=<PER_PAGE>
-    &page=<N>
+GET /api/cs/v2/estates/count?category_main_cb=N&category_type_cb=N&locality_country_id=10001
+GET /api/cs/v2/estates?category_main_cb=N&category_type_cb=N&locality_country_id=10001&per_page=N&page=N
+GET /api/cs/v2/estates/<hash_id>
 ```
-Returns a summary of each estate. Does **not** include a last-updated timestamp.
 
-### 2. Count endpoint
-```
-GET https://www.sreality.cz/api/cs/v2/estates/count
-    ?category_main_cb=<1-5>
-    &category_type_cb=<1-3>
-    &locality_country_id=10001
-```
-Returns `{ "result_size": N }`.
+- A browser-like User-Agent header is required — bare requests may get 403.
+- The API is unofficial — field names or structure may change without notice.
+- A polite delay (`REQUEST_DELAY_MS`) is enforced between requests.
 
-### 3. Detail endpoint
-```
-GET https://www.sreality.cz/api/cs/v2/estates/<hash_id>
-```
-Returns full estate detail including description, seller info, images, and
-the `items[]` array which contains the `"type": "edited"` entry ("Aktualizace")
-with the last-update date as a Czech human-readable string.
+---
 
-### Important API notes
-- A **browser-like User-Agent header is required** — bare requests may get 403.
-- The API is unofficial and undocumented — field names or structure may change.
-- No authentication is required.
-- A polite delay of 300ms between requests is enforced in `EstateScraper`.
+## External Data Sources (ETL only)
+
+| Source | URL | Format | Notes |
+|---|---|---|---|
+| RUIAN cast_obce | geodata.gov.cz ArcGIS FeatureServer | GeoJSON | Paginated, ~15k features |
+| RUIAN obec | geodata.gov.cz ArcGIS FeatureServer | GeoJSON | ~6,200 features |
+| RUIAN okres | geodata.gov.cz ArcGIS FeatureServer | GeoJSON | 77 features |
+| RUIAN kraj | geodata.gov.cz ArcGIS FeatureServer | GeoJSON | 14 features |
+| CSU demographics | czso.cz CSV download | CSV (Windows-1250, semicolon) | Population, area, avg age per obec |
+
+All URLs are configurable via environment variables. Defaults point to the live endpoints.
 
 ---
 
 ## Key Design Decisions
 
-### Change detection
-To avoid unnecessary detail fetches on periodic re-runs, each estate has a
-`_content_hash` field in MongoDB:
-```
-MD5(hash_id | price_czk.value_raw | name | labelsReleased)
-```
-If the hash matches what is already stored, the estate is skipped entirely.
-This is the primary mechanism for making re-runs cheap.
+### Scraper: change detection
+Each estate has a `_content_hash` field: `MD5(hash_id | price_czk.value_raw | name | labelsReleased)`.
+If the hash matches the stored value and `last_update_corrupted=false`, the estate is skipped.
+This makes re-runs cheap — only changed estates trigger a detail fetch.
 
-### Two-pass scraping
-1. Fetch all listing pages → get `hash_id`, price, name, labels
-2. For each estate where hash differs → fetch detail endpoint
-3. Merge both into one MongoDB document via `EstateDocumentBuilder`
+### Scraper: two-pass scraping
+1. Fetch listing pages → hash_id, price, name, labels
+2. For changed estates only → fetch detail endpoint
+3. Merge into one MongoDB document via `EstateDocumentBuilder`
+
+### ETL: streaming batches
+MongoDB is streamed in batches of 500 (configurable via `ETL_BATCH_SIZE`).
+Each batch is processed and discarded before the next is read. This keeps heap flat
+regardless of collection size. Peak heap during ETL is ~130 MB within a 256 MB budget.
+
+### ETL: spatial join strategy
+1. Try `cast_obce` STRtree (JTS R-tree, precise point-in-polygon)
+2. If no match → fall back to nearest `obec` centroid
+This gives Praha MČ / Brno obvody resolution where available, obec elsewhere.
+
+### ETL: SCD Type 2 on facts
+New fact row only when `price` or `is_active` changes. `valid_to` is set on the old row.
+Unchanged estates are skipped — no row written. This prevents near-duplicate row explosion.
+
+### ETL: SCD Type 1 on dimensions
+All dimension tables are upserted by natural key on every run.
+Always reflects the latest RUIAN boundaries and CSU demographics. No history kept.
 
 ### MongoDB collections
-Each property type × deal type combination has its own collection:
 ```
-apartments_sale          houses_sale          land_sale          commercial_sale          other_sale
-apartments_rent          houses_rent          land_rent          commercial_rent          other_rent
-apartments_auction       houses_auction       land_auction       commercial_auction       other_auction
-apartments_sale_history  houses_sale_history  ...                                        (one per estate collection)
-scrape_runs              (one document per run — append only, never updated)
+apartments_sale / rent / auction     houses_sale / rent / auction
+land_sale / rent / auction           commercial_sale / rent / auction
+other_sale / rent / auction
+<collection>_history                 scrape_runs
 ```
-Estate collection names are derived in `CategoryConfig.collectionName(categoryMainCb, categoryTypeCb)`.
-Each estate collection has a companion `<collection>_history` collection managed by `MongoRepository`.
-The `scrape_runs` collection is written by `MongoRepository.saveReport()` at the end of every run.
-
-### Mapping strategy
-All known API codes are translated to English human-readable strings.
-Unknown codes are stored as-is (e.g. `"unknown_42"`).
-All mappings live in `config/CategoryConfig.java` and `config/LabelConfig.java` —
-**this is the correct place to add new mappings**.
-
-### History (delta storage)
-Every estate collection `<col>` has a companion `<col>_history` collection.
-When an estate changes, only the **old values** of the changed fields are stored
-in a history entry — the current values are always in the main document.
-This is a delta/diff approach (Option A: nested objects like `seller` and `images`
-are compared and stored as atomic blobs).
-
-History entry structure:
-```json
-{
-  "hash_id":       123,
-  "recorded_at":   "2026-03-25T08:14:22Z",
-  "change_number": 3,
-  "reason":        "content_changed" | "corruption_repaired",
-  "delta": {
-    "price_czk_value": 9700000,
-    "seller": { ... old seller object ... }
-  }
-}
-```
-
-Trigger rules for writing a history entry:
-- Content hash changed (name/price/labels differ) → delta of all changed fields
-- Hash unchanged BUT was corrupted and detail now fixed → detail-only delta
-- Detail failed again on already-corrupted doc → NO entry (nothing new to record)
-- Brand new estate (first insert) → NO entry (nothing to diff against)
-
-Fields excluded from delta: `_id`, `_scraped_at`, `_updated_at`, `_update_count`,
-`_first_seen_at`, `_content_hash`, `_detail_preserved_from_previous`.
-
-To reconstruct the full state of an estate at any point in time:
-1. Take the current document from the estate collection
-2. Fetch all history entries for that `hash_id`, sorted by `recorded_at` descending
-3. Apply deltas in reverse until you reach the target date
-
-### 404 / 410 handling
-If the detail endpoint returns 404 or 410, the estate is stored using listing data only.
-`_detail_available: false` is set on the document.
-The count of gone estates is tracked in `ScrapeStats.goneEstates` and printed in the summary.
-
-### Update tracking
-Every document carries these metadata fields to track its history:
-
-| Field                 | Type      | Set on         | Meaning                                          |
-|-----------------------|-----------|----------------|--------------------------------------------------|
-| `_first_seen_at`      | ISO string| Insert only    | When the estate was first scraped                |
-| `_updated_at`         | ISO string| Insert + update| When the document was last changed               |
-| `_update_count`       | int       | Insert + update| How many times the content hash changed          |
-| `_scraped_at`         | ISO string| Every upsert   | When the scraper last visited this estate        |
-| `_content_hash`       | MD5 hex   | Every upsert   | Hash of price + name + labels for change detection|
-| `_detail_available`   | bool      | Every upsert   | Whether detail endpoint returned data            |
-| `last_update_corrupted`| bool     | Every upsert   | **true** = last scrape stored listing data only (detail failed); **false** = fully complete. Use this for quick corruption queries. |
-| `_detail_preserved_from_previous` | bool | Update only | Set to **true** when detail fetch failed but the previous document was complete — detail fields were backfilled from the prior version so no data was lost. |
-
-Note: `_scraped_at` updates on every run (even skipped ones do not update it — skipped means
-the document was not touched at all). `_updated_at` only changes when the content hash differs.
 
 ---
 
 ## Environment Variables
 
-| Variable                  | Default                                      | Description                                      |
-|---------------------------|----------------------------------------------|--------------------------------------------------|
-| `MONGO_HOST`              | `mongodb`                                    | MongoDB hostname                                 |
-| `MONGO_PORT`              | `27017`                                      | MongoDB port                                     |
-| `MONGO_DATABASE`          | `sreality`                                   | Database name                                    |
-| `MONGO_USERNAME`          | `scraper`                                    | MongoDB username                                 |
-| `MONGO_PASSWORD`          | `changeme`                                   | MongoDB password — **change in production**      |
-| `SREALITY_BASE_URL`       | `https://www.sreality.cz/api/cs/v2/estates`  | Base URL for the API                             |
-| `PER_PAGE`                | `100`                                        | Estates per listing API call (max ~100 is safe)  |
-| `MAX_ESTATES`             | `0`                                          | Dev limiter: stop after N estates (0 = unlimited)|
-| `HTTP_CONNECT_TIMEOUT_MS` | `10000`                                      | HTTP connect timeout in milliseconds             |
-| `HTTP_READ_TIMEOUT_MS`    | `30000`                                      | HTTP read timeout in milliseconds                |
+### Scraper
+| Variable | Default | Description |
+|---|---|---|
+| `MONGO_HOST` | `mongodb` | MongoDB hostname |
+| `MONGO_PORT` | `27017` | MongoDB port |
+| `MONGO_DATABASE` | `sreality` | Database name |
+| `MONGO_USERNAME` | `scraper` | MongoDB username |
+| `MONGO_PASSWORD` | `changeme` | MongoDB password |
+| `SREALITY_BASE_URL` | `https://...` | Sreality API base URL |
+| `PER_PAGE` | `100` | Estates per listing page |
+| `MAX_ESTATES` | `0` | Dev limiter (0 = unlimited) |
+| `HTTP_CONNECT_TIMEOUT_MS` | `10000` | Connect timeout |
+| `HTTP_READ_TIMEOUT_MS` | `30000` | Read timeout |
+| `REQUEST_DELAY_MS` | `500` | Delay between requests |
+| `TELEGRAM_BOT_TOKEN` | `` | Optional Telegram notifications |
+| `TELEGRAM_CHAT_ID` | `` | Optional Telegram chat ID |
 
-Copy `.env.example` to `.env` and fill in real values before running.
+### ETL
+| Variable | Default | Description |
+|---|---|---|
+| `PG_HOST` | `postgres` | PostgreSQL hostname |
+| `PG_PORT` | `5432` | PostgreSQL port |
+| `PG_DATABASE` | `sreality_dw` | PostgreSQL database |
+| `PG_USERNAME` | `etl` | PostgreSQL username |
+| `PG_PASSWORD` | `changeme` | PostgreSQL password |
+| `PG_SCHEMA` | `dw` | Schema for all warehouse tables |
+| `ETL_BATCH_SIZE` | `500` | MongoDB streaming batch size |
+| `ETL_HTTP_TIMEOUT_MS` | `60000` | Timeout for RUIAN/CSU downloads |
+| `RUIAN_CAST_OBCE_URL` | (default) | Override RUIAN cast_obce endpoint |
+| `RUIAN_OBEC_URL` | (default) | Override RUIAN obec endpoint |
+| `RUIAN_OKRES_URL` | (default) | Override RUIAN okres endpoint |
+| `RUIAN_KRAJ_URL` | (default) | Override RUIAN kraj endpoint |
+| `CSU_DEMOGRAPHICS_URL` | (default) | Override CSU CSV URL |
 
 ---
 
 ## How to Build and Run
 
-### Local development (quick test with limiter)
 ```bash
+# First time setup
 cp .env.example .env
-# Set MAX_ESTATES=20 in .env for a quick test run
+# Edit .env with real passwords
 
-docker compose up --build
+# Start persistent services
+docker compose up -d mongodb postgres
+
+# Run scraper once
+docker compose run --rm scraper
+
+# Run ETL once (requires MongoDB to have estate data)
+docker compose run --rm etl
+
+# View logs
+docker compose logs -f etl
+docker compose logs -f scraper
 ```
 
-### Full scrape
-```bash
-# Set MAX_ESTATES=0 in .env (or leave unset)
-docker compose up --build
+### Cron automation (server)
+```cron
+# Scraper: nightly at 02:00
+0 2 * * *   cd /srv/sreality && docker compose run --rm scraper >> /var/log/sreality-scraper.log 2>&1
+# ETL: weekly Monday at 03:00
+0 3 * * 1   cd /srv/sreality && docker compose run --rm etl >> /var/log/sreality-etl.log 2>&1
 ```
-
-### Production deployment
-```bash
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
-```
-
-### Build the JAR manually
-```bash
-mvn package -DskipTests
-java -jar target/sreality-scraper-1.0-SNAPSHOT.jar
-```
-
----
-
-## Adding New Code
-
-### Adding a new label / code mapping
-Edit `config/LabelConfig.java` or `config/CategoryConfig.java`.
-Add a new `Map.entry(...)` to the appropriate map.
-Add a human-readable English label and optionally a description comment.
-
-### Adding a new field from the API
-If a new field appears in the listing response: add extraction to `EstateDocumentBuilder.build()`.
-If it appears in the detail response: add it to `appendDetailFields()` or `appendItems()`.
-If it has a code that needs mapping: add the mapping to `LabelConfig` or `CategoryConfig` first.
-
-### Adding a new category combination
-Add the new `category_main_cb` value to `CATEGORY_MAIN_CBS` in `EstateScraper.java`
-and add its mapping to `CategoryConfig.PROPERTY_TYPE`.
 
 ---
 
 ## What NOT to Do
 
-- **Do not** add scheduling logic inside the Java app — the scraper exits after one run.
-  Use cron or a docker restart policy instead.
-- **Do not** commit `.env` — it contains secrets. Only `.env.example` is committed.
-- **Do not** change the `hash_id` field name — it is the upsert key in MongoDB.
-- **Do not** change the `_content_hash` field name — it is used for change detection.
-- **Do not** add authentication handling for the sreality API — it is not needed.
-- **Do not** remove the `REQUEST_DELAY_MS` sleep in `EstateScraper` — it keeps
-  the scraper polite and avoids rate limiting / IP bans.
-- **Do not** use `Map.of()` with more than 10 entries — use `Map.ofEntries()` instead
-  (Java limitation). This is already done correctly in the codebase.
+- **Do not** add scheduling logic inside either Java app — both exit after one run.
+- **Do not** commit `.env` — only `.env.example` is committed.
+- **Do not** change `hash_id` field name — it is the upsert key throughout.
+- **Do not** change `_content_hash` field name — used for scraper change detection.
+- **Do not** remove `REQUEST_DELAY_MS` sleep — keeps scraper polite.
+- **Do not** use `Map.of()` with more than 10 entries — use `Map.ofEntries()`.
+- **Do not** load entire MongoDB collections into memory in the ETL — always stream via `MongoExtractor.streamCollection()`.
+- **Do not** store JTS geometry objects in PostgreSQL — they are in-memory only in `DimCastObce` for spatial joins. Only the surrogate keys are stored in PG.
 
 ---
 
-## Known Limitations and Gotchas
+## Dependencies
 
-- The sreality API is **unofficial** — field structure can change without notice.
-  If scraping suddenly breaks, check whether the API response shape has changed.
-- The `"Aktualizace"` (last update) field in the detail endpoint is a human-readable
-  Czech string, not a timestamp. `DateParser` handles known values; unknown formats
-  are stored as raw strings.
-- The listing endpoint does **not** expose a last-updated timestamp per estate.
-  Change detection relies on the content hash of price + name + labels only.
-- `category_main_cb` values beyond 5 and `category_type_cb` values beyond 3 are
-  stored with an `"unknown_N"` label — add them to `CategoryConfig` if discovered.
-- MongoDB collection names are derived from the category codes. If sreality ever
-  adds new categories, new collections will be auto-created on first insert.
-- The detail endpoint returns **HTTP 410 Gone** with body `{"logged_in": false}` for
-  estates that existed in the search index but were sold/withdrawn before the detail
-  fetch. The `logged_in: false` body is sreality's generic minimal 410 response and
-  has **nothing to do with authentication** — it is a red herring. These estates are
-  stored with listing data only (`_detail_available: false`) and counted as `goneEstates`
-  in the scrape summary. Expect roughly 1–3% of estates per run to fall into this category.
+### Scraper
+| Dependency | Version | Purpose |
+|---|---|---|
+| `mongodb-driver-sync` | 5.1.2 | MongoDB Java driver |
+| `httpclient5` | 5.3.1 | HTTP requests |
+| `jackson-databind` | 2.17.2 | JSON parsing |
+| `logback-classic` | 1.5.6 | Logging |
 
----
-
-## Dependencies (key ones)
-
-| Dependency                        | Version  | Purpose                        |
-|-----------------------------------|----------|--------------------------------|
-| `mongodb-driver-sync`             | 5.1.2    | MongoDB Java driver            |
-| `httpclient5`                     | 5.3.1    | HTTP requests                  |
-| `jackson-databind`                | 2.17.2   | JSON parsing                   |
-| `logback-classic`                 | 1.5.6    | Logging implementation         |
-| `slf4j-api`                       | 2.0.13   | Logging facade                 |
-
-Full dependency list is in `pom.xml`.
+### ETL (additional)
+| Dependency | Version | Purpose |
+|---|---|---|
+| `postgresql` | 42.7.3 | PostgreSQL JDBC driver |
+| `HikariCP` | 5.1.0 | JDBC connection pool |
+| `jts-core` | 1.19.0 | Spatial join (point-in-polygon) |
+| `commons-csv` | 1.11.0 | CSU CSV parsing |
 
 ---
 
 ## Keeping This File Up to Date
 
-**Any agent that makes a structural change to this project must update AGENTS.md
-to reflect that change before considering the task complete.**
-
-Specifically, update this file when you:
-
-- **Add, rename, or delete a file or directory** — update the Repository Structure tree
-- **Add a new environment variable** — add a row to the Environment Variables table
-  and add the variable with its default to `AppConfig.java` and `.env.example`
-- **Add a new API endpoint or change how an existing one is called** — update the
-  API Being Scraped section
-- **Add a new MongoDB collection or change the collection naming scheme** — update
-  the MongoDB collections block under Key Design Decisions
-- **Add a new mapping category** (e.g. a new `LabelConfig` map or `CategoryConfig` entry) —
-  add a note under Adding New Code
-- **Change a key design decision** (hash fields, upsert key, two-pass logic, delay) —
-  update the relevant subsection and the What NOT to Do list if needed
-- **Add, upgrade, or remove a dependency** — update the Dependencies table and `pom.xml`
-- **Discover a new API gotcha or limitation** — add it to Known Limitations and Gotchas
-
-When updating, keep the same tone and formatting as the rest of the file.
-Do not add speculative or forward-looking content — only document what is
-actually implemented and verified.
+Any agent making a structural change must update AGENTS.md before finishing.
+Update when you: add/rename/delete files, add env vars, change design decisions,
+add dependencies, discover API gotchas, or change MongoDB collection names.

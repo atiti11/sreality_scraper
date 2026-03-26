@@ -10,48 +10,67 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      # Secrets
-      MONGO_ROOT_USERNAME: ${{ secrets.MONGO_ROOT_USERNAME }}
-      MONGO_ROOT_PASSWORD: ${{ secrets.MONGO_ROOT_PASSWORD }}
-      MONGO_USERNAME: ${{ secrets.MONGO_USERNAME }}
-      MONGO_PASSWORD: ${{ secrets.MONGO_PASSWORD }}
-      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-      # Variables
-      MONGO_HOST: ${{ vars.MONGO_HOST }}
-      MONGO_PORT: ${{ vars.MONGO_PORT }}
-      MONGO_HOST_PORT: ${{ vars.MONGO_HOST_PORT }}
-      MONGO_DATABASE: ${{ vars.MONGO_DATABASE }}
-      SREALITY_BASE_URL: ${{ vars.SREALITY_BASE_URL }}
-      PER_PAGE: ${{ vars.PER_PAGE }}
-      MAX_ESTATES: ${{ vars.MAX_ESTATES }}
-      HTTP_CONNECT_TIMEOUT_MS: ${{ vars.HTTP_CONNECT_TIMEOUT_MS }}
-      HTTP_READ_TIMEOUT_MS: ${{ vars.HTTP_READ_TIMEOUT_MS }}
-      REQUEST_DELAY_MS: ${{ vars.REQUEST_DELAY_MS }}
+      # ── Secrets ──────────────────────────────────────────────────────────────
+      MONGO_ROOT_USERNAME:  ${{ secrets.MONGO_ROOT_USERNAME }}
+      MONGO_ROOT_PASSWORD:  ${{ secrets.MONGO_ROOT_PASSWORD }}
+      MONGO_USERNAME:       ${{ secrets.MONGO_USERNAME }}
+      MONGO_PASSWORD:       ${{ secrets.MONGO_PASSWORD }}
+      PG_PASSWORD:          ${{ secrets.PG_PASSWORD }}
+      TELEGRAM_BOT_TOKEN:   ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID:     ${{ secrets.TELEGRAM_CHAT_ID }}
+      DEPLOY_PATH:          ${{ secrets.DEPLOY_PATH }}
+      # ── Variables ─────────────────────────────────────────────────────────────
+      MONGO_HOST:                ${{ vars.MONGO_HOST }}
+      MONGO_PORT:                ${{ vars.MONGO_PORT }}
+      MONGO_HOST_PORT:           ${{ vars.MONGO_HOST_PORT }}
+      MONGO_DATABASE:            ${{ vars.MONGO_DATABASE }}
+      SREALITY_BASE_URL:         ${{ vars.SREALITY_BASE_URL }}
+      PER_PAGE:                  ${{ vars.PER_PAGE }}
+      MAX_ESTATES:               ${{ vars.MAX_ESTATES }}
+      HTTP_CONNECT_TIMEOUT_MS:   ${{ vars.HTTP_CONNECT_TIMEOUT_MS }}
+      HTTP_READ_TIMEOUT_MS:      ${{ vars.HTTP_READ_TIMEOUT_MS }}
+      REQUEST_DELAY_MS:          ${{ vars.REQUEST_DELAY_MS }}
+      # PostgreSQL
+      PG_HOST:                   ${{ vars.PG_HOST }}
+      PG_PORT:                   ${{ vars.PG_PORT }}
+      PG_HOST_PORT:              ${{ vars.PG_HOST_PORT }}
+      PG_DATABASE:               ${{ vars.PG_DATABASE }}
+      PG_USERNAME:               ${{ vars.PG_USERNAME }}
+      PG_SCHEMA:                 ${{ vars.PG_SCHEMA }}
+      # ETL tuning
+      ETL_BATCH_SIZE:            ${{ vars.ETL_BATCH_SIZE }}
+      ETL_HTTP_TIMEOUT_MS:       ${{ vars.ETL_HTTP_TIMEOUT_MS }}
 
     steps:
-      - name: Write .env and redeploy via SSH
+      - name: Write .env, build images and redeploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.DEPLOY_HOST }}
+          host:     ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          key:      ${{ secrets.DEPLOY_SSH_KEY }}
           # Pass all secrets/variables as env vars into the SSH session.
-          # This avoids special-character shell-interpretation issues that occur
-          # when values are substituted inline into a heredoc script.
-          envs: MONGO_HOST,MONGO_PORT,MONGO_HOST_PORT,MONGO_DATABASE,MONGO_ROOT_USERNAME,MONGO_ROOT_PASSWORD,MONGO_USERNAME,MONGO_PASSWORD,SREALITY_BASE_URL,PER_PAGE,MAX_ESTATES,HTTP_CONNECT_TIMEOUT_MS,HTTP_READ_TIMEOUT_MS,REQUEST_DELAY_MS,TELEGRAM_BOT_TOKEN,TELEGRAM_CHAT_ID,DEPLOY_PATH
+          # Avoids shell-interpretation issues with special characters.
+          envs: >-
+            MONGO_HOST,MONGO_PORT,MONGO_HOST_PORT,MONGO_DATABASE,
+            MONGO_ROOT_USERNAME,MONGO_ROOT_PASSWORD,
+            MONGO_USERNAME,MONGO_PASSWORD,
+            SREALITY_BASE_URL,PER_PAGE,MAX_ESTATES,
+            HTTP_CONNECT_TIMEOUT_MS,HTTP_READ_TIMEOUT_MS,REQUEST_DELAY_MS,
+            TELEGRAM_BOT_TOKEN,TELEGRAM_CHAT_ID,
+            PG_HOST,PG_PORT,PG_HOST_PORT,PG_DATABASE,
+            PG_USERNAME,PG_PASSWORD,PG_SCHEMA,
+            ETL_BATCH_SIZE,ETL_HTTP_TIMEOUT_MS,
+            DEPLOY_PATH
           script: |
             set -e
             cd "$DEPLOY_PATH"
 
-            # Pull latest code
+            # ── Pull latest code ──────────────────────────────────────────────
             git pull origin main
 
-            # Write .env safely — values arrive as env vars so special
-            # characters are never interpreted by the shell.
-            # Docker Compose interprets $ in .env files, so we escape
-            # $ as $ in all values to ensure they are passed through literally.
+            # ── Write .env ────────────────────────────────────────────────────
+            # Values arrive as env vars — no shell interpretation of their content.
+            # Docker Compose interprets $ in .env values, so we escape them.
             escape_for_dotenv() { printf '%s' "$1" | sed 's/\$/\$\$/g'; }
 
             printf '%s\n' \
@@ -71,13 +90,30 @@ jobs:
               "REQUEST_DELAY_MS=$(escape_for_dotenv "$REQUEST_DELAY_MS")" \
               "TELEGRAM_BOT_TOKEN=$(escape_for_dotenv "$TELEGRAM_BOT_TOKEN")" \
               "TELEGRAM_CHAT_ID=$(escape_for_dotenv "$TELEGRAM_CHAT_ID")" \
+              "PG_HOST=$(escape_for_dotenv "$PG_HOST")" \
+              "PG_PORT=$(escape_for_dotenv "$PG_PORT")" \
+              "PG_HOST_PORT=$(escape_for_dotenv "$PG_HOST_PORT")" \
+              "PG_DATABASE=$(escape_for_dotenv "$PG_DATABASE")" \
+              "PG_USERNAME=$(escape_for_dotenv "$PG_USERNAME")" \
+              "PG_PASSWORD=$(escape_for_dotenv "$PG_PASSWORD")" \
+              "PG_SCHEMA=$(escape_for_dotenv "$PG_SCHEMA")" \
+              "ETL_BATCH_SIZE=$(escape_for_dotenv "$ETL_BATCH_SIZE")" \
+              "ETL_HTTP_TIMEOUT_MS=$(escape_for_dotenv "$ETL_HTTP_TIMEOUT_MS")" \
               > .env
 
-            # Rebuild scraper image and ensure MongoDB is up
+            # ── Build images ──────────────────────────────────────────────────
+            # Rebuild scraper (root Dockerfile)
             docker compose -f docker-compose.yml -f docker-compose.prod.yml \
               build --no-cache scraper
+
+            # Rebuild ETL (etl/Dockerfile)
             docker compose -f docker-compose.yml -f docker-compose.prod.yml \
-              up -d mongodb
+              build --no-cache etl
+
+            # ── Start persistent services ─────────────────────────────────────
+            # mongodb and postgres run continuously; scraper and etl are run-once
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+              up -d mongodb postgres
 
       - name: Notify Telegram
         if: always()

@@ -2,23 +2,21 @@
 # Apply on top of docker-compose.yml on the VPS:
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 #
-# This file only overrides production-specific settings.
-
-version: "3.9"
+# Only overrides production-specific settings — resource limits, pinned
+# image versions, and logging config. All service definitions live in
+# docker-compose.yml.
 
 services:
 
   mongodb:
-    # Pin to a specific patch version for reproducibility in production
-    image: mongo:7.0.12
+    image: mongo:7.0.12   # pinned patch version for reproducibility
     deploy:
       resources:
         limits:
           memory: 512m
 
   scraper:
-    # Pull a pre-built image from a registry instead of building on the VPS
-    # Uncomment and set your registry when you have one:
+    # Uncomment to pull a pre-built image from a registry instead of building:
     # image: ghcr.io/youruser/sreality-scraper:latest
     deploy:
       resources:
@@ -27,7 +25,32 @@ services:
         limits:
           memory: 512m
           pids: 50
-    # Override logging driver to keep container logs manageable
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  postgres:
+    image: postgres:16.3   # pinned patch version
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  etl:
+    deploy:
+      resources:
+        reservations:
+          memory: 64m
+        limits:
+          memory: 256m   # matches -Xmx256m in etl/Dockerfile ENTRYPOINT
+          pids: 50
     logging:
       driver: "json-file"
       options:

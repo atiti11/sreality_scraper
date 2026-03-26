@@ -6,10 +6,13 @@ networks:
 volumes:
   mongo-data:
   scraper-logs:
+  postgres-data:
+  etl-logs:
 
 
 services:
 
+  # ── MongoDB — operational store (scraper writes here) ─────────────────────
   mongodb:
     image: mongo:7.0
     container_name: sreality-mongodb
@@ -34,12 +37,13 @@ services:
       retries: 5
       start_period: 20s
 
+  # ── Scraper — stateless, run once per cron trigger ────────────────────────
   scraper:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: sreality-scraper
-    restart: "no" # stateless — run once per cron trigger, do not auto-restart
+    restart: "no"
     depends_on:
       mongodb:
         condition: service_healthy
@@ -61,5 +65,65 @@ services:
       REQUEST_DELAY_MS: ${REQUEST_DELAY_MS:-500}
     volumes:
       - scraper-logs:/app/logs
+    networks:
+      - scraper-net
+
+  # ── PostgreSQL — data warehouse (ETL writes here) ─────────────────────────
+  postgres:
+    image: postgres:16
+    container_name: sreality-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${PG_DATABASE:-sreality_dw}
+      POSTGRES_USER: ${PG_USERNAME:-etl}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-changeme}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - scraper-net
+    ports:
+      - "127.0.0.1:${PG_HOST_PORT:-5433}:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${PG_USERNAME:-etl} -d ${PG_DATABASE:-sreality_dw}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ── ETL — stateless, run once on demand or via cron ──────────────────────
+  # Trigger manually:   docker compose run --rm etl
+  # Or via cron:        0 3 * * 1  docker compose -f /path/to/docker-compose.yml run --rm etl
+  etl:
+    build:
+      context: ./etl
+      dockerfile: Dockerfile
+    container_name: sreality-etl
+    restart: "no"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      # MongoDB source
+      MONGO_HOST: mongodb
+      MONGO_PORT: 27017
+      MONGO_DATABASE: ${MONGO_DATABASE:-sreality}
+      MONGO_USERNAME: ${MONGO_USERNAME:-scraper}
+      MONGO_PASSWORD: ${MONGO_PASSWORD:-changeme}
+      # PostgreSQL destination
+      PG_HOST: postgres
+      PG_PORT: 5432
+      PG_DATABASE: ${PG_DATABASE:-sreality_dw}
+      PG_USERNAME: ${PG_USERNAME:-etl}
+      PG_PASSWORD: ${PG_PASSWORD:-changeme}
+      PG_SCHEMA: ${PG_SCHEMA:-dw}
+      # Processing
+      ETL_BATCH_SIZE: ${ETL_BATCH_SIZE:-500}
+      ETL_HTTP_TIMEOUT_MS: ${ETL_HTTP_TIMEOUT_MS:-60000}
+    volumes:
+      - etl-logs:/app/logs
     networks:
       - scraper-net
