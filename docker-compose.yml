@@ -1,5 +1,6 @@
 networks:
   scraper-net:
+    name: scraper-shared-net
     driver: bridge
 
 volumes:
