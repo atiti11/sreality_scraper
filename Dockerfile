@@ -37,4 +37,4 @@ USER scraper
 HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
     CMD java -cp app.jar com.sreality.scraper.Main --healthcheck 2>/dev/null || exit 1
 
-ENTRYPOINT ["java", "-Xms64m", "-Xmx256m", "-XX:+UseContainerSupport", "-Xint", "-XX:+UseSerialGC", "-XX:ReservedCodeCacheSize=16m", "-jar", "app.jar"]
+ENTRYPOINT ["java", "-Xms64m", "-Xmx256m", "-XX:+UseContainerSupport", "-Xint", "-XX:+UseSerialGC", "-XX:ReservedCodeCacheSize=16m", "-XX:NativeMemoryTracking=detail", "-jar", "app.jar"]
