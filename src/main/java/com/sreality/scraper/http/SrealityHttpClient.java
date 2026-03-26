@@ -57,6 +57,10 @@ public class SrealityHttpClient implements AutoCloseable {
         request.setHeader("Accept",      "application/json");
         request.setHeader("Accept-Language", "cs,en;q=0.9");
         request.setHeader("Connection", "close");
+        // Explicitly request uncompressed responses to avoid GZIPInputStream
+        // native ZLib Inflater objects accumulating in native memory.
+        // With a small heap and infrequent GC, these are never finalized promptly.
+        request.setHeader("Accept-Encoding", "identity");
 
         log.debug("GET {}", url);
 
