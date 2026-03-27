@@ -3,6 +3,7 @@ WORKDIR /build
 COPY pom.xml .
 RUN mvn dependency:go-offline -q
 COPY src ./src
+# Cache-bust: increment this comment to force rebuild: v14
 RUN mvn package -DskipTests -q
 
 FROM eclipse-temurin:21-jre-jammy
@@ -21,4 +22,5 @@ USER etl
 #   JDBC + misc:          ~30 MB
 #   Safety margin:        ~50 MB
 #   Total peak:          ~400 MB → Xmx512m
-ENTRYPOINT ["java",  "-Xms64m", "-Xmx512m",  "-XX:+UseContainerSupport", "-XX:+UseSerialGC", "-XX:ReservedCodeCacheSize=16m", "-XX:+ExitOnOutOfMemoryError", "-jar", "app.jar"]
+# ST_UKSG contains ZSJ polygons for all 6258 obec — needs more heap than ST_UZSZ
+ENTRYPOINT ["java", "-Xms64m", "-Xmx768m", "-XX:+UseContainerSupport", "-XX:+UseSerialGC", "-XX:ReservedCodeCacheSize=16m", "-XX:+ExitOnOutOfMemoryError", "-jar", "app.jar"]

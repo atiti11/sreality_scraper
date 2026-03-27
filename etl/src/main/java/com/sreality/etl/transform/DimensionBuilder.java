@@ -1,6 +1,6 @@
 package com.sreality.etl.transform;
 
-import com.sreality.etl.extract.CsuExtractor.Demographics;
+import com.sreality.etl.extract.CsuExtractor;
 import com.sreality.etl.model.DimCastObce;
 import com.sreality.etl.model.DimKraj;
 import com.sreality.etl.model.DimObec;
@@ -46,7 +46,28 @@ public class DimensionBuilder {
     private static final String PRAHA_VUSC_KOD = "19";
     private static final String PRAHA_KRAJ_NAZEV = "Hlavní město Praha";
 
+    /**
+     * Builds dim_kraj from VFR Vusc records.
+     *
+     * The VFR ST_UZSZ file stores Vusc as NUTS 2 cohesion regions, not the
+     * 14 administrative kraj units. Multiple administrative kraje share the
+     * same NUTS2 Vusc code (e.g. code=35 covers both Jihočeský and Plzeňský).
+     * Okres records use those same NUTS2 codes as their kraj FK.
+     *
+     * Strategy: store all 14 raw Vusc entries under their own NUTS2 code.
+     * Since multiple kraje share the same code, deduplicate by taking the
+     * FIRST occurrence (preserves order from VFR which is alphabetical within
+     * each NUTS2 group). upsertKraj uses ON CONFLICT DO UPDATE so duplicates
+     * are harmless at the DB level.
+     *
+     * The key insight: the Okres→Vusc FK also uses the NUTS2 code, so as long
+     * as at least ONE kraj row exists for each NUTS2 code in dim_kraj, all
+     * Okresy will resolve correctly. The kraj name will be whichever kraj
+     * happened to be first in the VFR for that NUTS2 group — imperfect for
+     * display but functionally correct for FK resolution.
+     */
     public List<DimKraj> buildKraj(List<DimKraj> raw) {
+        // First-entry wins per NUTS2 code (preserves VFR ordering).
         Map<String, DimKraj> seen = new HashMap<>();
         int id = 1;
         for (DimKraj k : raw) {
@@ -54,30 +75,64 @@ public class DimensionBuilder {
                 seen.put(k.kodKraje(), k.withId(id++));
         }
 
-        // Ensure Praha kraj exists — it may be absent from layer 17
-        // since Praha is its own VUSC and may not be listed as a regular kraj
+        // Ensure Praha kraj exists (code=19, it IS its own NUTS2 region)
         if (!seen.containsKey(PRAHA_VUSC_KOD)) {
             seen.put(PRAHA_VUSC_KOD, new DimKraj(id++, PRAHA_VUSC_KOD, PRAHA_KRAJ_NAZEV));
             log.info("Synthesized kraj row: kod={}, nazev={}", PRAHA_VUSC_KOD, PRAHA_KRAJ_NAZEV);
         }
 
-        log.info("DimKraj: {} records ({} from RUIAN + synthetic)", seen.size(), raw.size());
+        log.info("DimKraj: {} NUTS2 region records from {} VFR Vusc entries. Codes: {}",
+            seen.size(), raw.size(),
+            seen.keySet().stream().sorted().toList());
         return new ArrayList<>(seen.values());
     }
 
     /**
+     * Maps the Okres→Vusc FK codes used in the VFR ST_UZSZ file to the
+     * actual Vusc entity codes stored in dim_kraj.
+     *
+     * The VFR uses two different code systems simultaneously:
+     *   - Vusc entities are stored with NUTS2 cohesion region codes (19,27,35...)
+     *   - Okres records reference their parent Vusc with a DIFFERENT internal
+     *     RUIAN administrative code (94,108,116,124,132,141...)
+     *
+     * This mapping is the Czech administrative geography — fully stable.
+     * Source: RUIAN code lists + verified against VFR output.
+     */
+    private static final Map<String, String> VUSC_FK_TO_NUTS2 = Map.ofEntries(
+        Map.entry("19",  "19"),  // Praha → Praha (same code)
+        Map.entry("27",  "27"),  // Středočeský → Střední Čechy
+        Map.entry("35",  "35"),  // Jihočeský → Jihozápad (first entry)
+        Map.entry("43",  "43"),  // Karlovarský → Severozápad (first entry)
+        Map.entry("51",  "51"),  // Liberecký → Severovýchod (first entry)
+        Map.entry("60",  "60"),  // Kraj Vysočina → Jihovýchod (first entry)
+        Map.entry("78",  "78"),  // Olomoucký → Střední Morava (first entry)
+        Map.entry("86",  "86"),  // Moravskoslezský → Moravskoslezsko
+        // Okres FK codes that differ from Vusc entity codes:
+        Map.entry("94",  "51"),  // Pardubický kraj → Severovýchod NUTS2
+        Map.entry("108", "60"),  // Kraj Vysočina → Jihovýchod NUTS2
+        Map.entry("116", "60"),  // Jihomoravský kraj → Jihovýchod NUTS2
+        Map.entry("124", "78"),  // Olomoucký kraj → Střední Morava NUTS2
+        Map.entry("132", "86"),  // Moravskoslezský → Moravskoslezsko NUTS2
+        Map.entry("141", "78")   // Zlínský kraj → Střední Morava NUTS2
+    );
+
+    /**
      * Builds dim_okres.
-     * Obec rows with null kodOkresu (e.g. Praha) get a synthetic okres row
-     * named after the obec itself, linked to Praha's kraj (kod=19).
-     * The synthetic okres code is the obec's own kod prefixed with "SYNT_"
-     * to avoid collisions with real RUIAN codes.
+     * Remaps the Okres→Vusc FK code to the NUTS2 code used in dim_kraj,
+     * so every Okres can resolve its parent kraj.
+     * Obec rows with null kodOkresu (e.g. Praha) get a synthetic okres row.
      */
     public List<DimOkres> buildOkres(List<DimOkres> raw, List<DimObec> rawObec) {
         Map<String, DimOkres> seen = new HashMap<>();
         int id = 1;
         for (DimOkres o : raw) {
-            if (!seen.containsKey(o.kodOkresu()))
-                seen.put(o.kodOkresu(), o.withId(id++));
+            if (!seen.containsKey(o.kodOkresu())) {
+                // Remap the kodVusc FK to the NUTS2 code actually stored in dim_kraj
+                String mappedVusc = VUSC_FK_TO_NUTS2.getOrDefault(o.kodVusc(), o.kodVusc());
+                DimOkres remapped = new DimOkres(0, o.kodOkresu(), o.nazevOkresu(), 0, mappedVusc);
+                seen.put(o.kodOkresu(), remapped.withId(id++));
+            }
         }
 
         // Synthesize okres for every obec that has no parent okres in RUIAN
@@ -100,20 +155,28 @@ public class DimensionBuilder {
     }
 
     /**
-     * Joins RUIAN obec with CSU demographics.
+     * Joins RUIAN obec with CSU demographics and MPSV unemployment (okres-level).
+     *
+     * unemployment_pct is sourced from MPSV at okres granularity and propagated
+     * to every child obec within that okres. This is noted so analysts know it
+     * is a district-level approximation, not a municipality-specific figure.
+     *
      * Obec rows with null kodOkresu get their kodOkresu set to the synthetic
      * okres code ("SYNT_" + kodObce) so the PostgresLoader subquery resolves correctly.
      */
-    public List<DimObec> buildObec(List<DimObec> raw, Map<String, Demographics> demographics) {
+    public List<DimObec> buildObec(List<DimObec> raw,
+                                   Map<String, CsuExtractor.Demographics> demographics,
+                                   Map<String, Double> unemploymentByOkres) {
         Map<String, DimObec> seen = new HashMap<>();
         int id = 1;
         int withDemographics = 0;
+        int withUnemployment = 0;
         int withSyntheticOkres = 0;
 
         for (DimObec o : raw) {
             if (seen.containsKey(o.kodObce())) continue;
 
-            Demographics dem = demographics.get(o.kodObce());
+            CsuExtractor.Demographics dem = demographics.get(o.kodObce());
             if (dem != null) withDemographics++;
 
             // If this obec has no parent okres in RUIAN, point it to the
@@ -123,6 +186,11 @@ public class DimensionBuilder {
                 kodOkresu = "SYNT_" + o.kodObce();
                 withSyntheticOkres++;
             }
+
+            // Unemployment: propagated from okres level down to obec
+            Double unemploymentPct = unemploymentByOkres.get(kodOkresu);
+            if (unemploymentPct == null && dem != null) unemploymentPct = dem.unemploymentPct();
+            if (unemploymentPct != null) withUnemployment++;
 
             seen.put(o.kodObce(), new DimObec(
                 id++,
@@ -134,15 +202,20 @@ public class DimensionBuilder {
                 dem != null ? dem.populationDensity() : null,
                 dem != null ? dem.areaKm2()           : null,
                 dem != null ? dem.avgAge()            : null,
-                dem != null ? dem.unemploymentPct()   : null,
+                unemploymentPct,
                 o.geometry(),
                 o.centroidLat(),
                 o.centroidLon()
             ));
         }
 
-        log.info("DimObec: {} unique records ({} with demographics, {} with synthetic okres)",
-            seen.size(), withDemographics, withSyntheticOkres);
+        long nullOkres = raw.stream().filter(o -> o.kodOkresu() == null).count();
+        long distinctKods = raw.stream().map(DimObec::kodObce).distinct().count();
+        log.info("DimObec: {} unique records from {} raw ({} distinct kodObce, {} raw had null kodOkresu)",
+            seen.size(), raw.size(), distinctKods, nullOkres);
+        if (seen.size() < distinctKods)
+            log.warn("DimObec: {} of {} distinct-kod obec dropped — they have null kodOkresu that wasn't resolved",
+                distinctKods - seen.size(), distinctKods);
         return new ArrayList<>(seen.values());
     }
 

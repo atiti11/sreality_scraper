@@ -1,0 +1,83 @@
+ Container sreality-postgres  Running
+ Container sreality-mongodb  Running
+2026-03-27 18:23:10 [main] INFO  com.sreality.etl.Main - Starting ETL run. Config: EtlConfig{mongo=mongodb:27017/sreality, pg=postgres:5432/sreality_dw/dw, batchSize=500}
+2026-03-27 18:23:10 [main] INFO  c.s.etl.extract.MongoExtractor - MongoExtractor connected to mongodb/sreality
+2026-03-27 18:23:10 [main] INFO  c.sreality.etl.load.PostgresLoader - PostgresLoader connected to postgres/sreality_dw
+2026-03-27 18:23:10 [main] INFO  c.sreality.etl.load.PostgresLoader - Ensuring schema 'dw' and all tables exist...
+2026-03-27 18:23:10 [main] INFO  c.sreality.etl.load.PostgresLoader - Schema ready.
+2026-03-27 18:23:10 [main] INFO  com.sreality.etl.Main - === EXTRACT RUIAN VFR (primary source) ===
+2026-03-27 18:23:10 [main] INFO  c.s.etl.extract.RuianVfrExtractor - Trying RUIAN VFR (ST_UZSZ): https://services.cuzk.gov.cz/vfr/202602/20260228_ST_UZSZ.xml.zip
+2026-03-27 18:23:11 [main] INFO  c.s.etl.extract.RuianVfrExtractor - Downloaded 4 MB — parsing XML...
+2026-03-27 18:23:11 [main] INFO  c.s.etl.extract.RuianVfrExtractor - Parsing VFR XML: 20260228_ST_UZSZ.xml (snapshot: 2026-02-28)
+2026-03-27 18:23:11 [main] WARN  c.s.etl.extract.RuianVfrExtractor - VFR Obec[0] kod=2020 fkKod=3601 children=[Kod, Nazev, StatusKod, Okres, Pou, PlatiOd, IdTransakce, GlobalniIdNavrhuZmeny, MluvnickeCharakteristiky, VlajkaText, ZnakText, NutsLau, Geometrie]
+2026-03-27 18:23:11 [main] WARN  c.s.etl.extract.RuianVfrExtractor - VFR Obec[1] kod=1970 fkKod=3601 children=[Kod, Nazev, StatusKod, Okres, Pou, PlatiOd, IdTransakce, GlobalniIdNavrhuZmeny, MluvnickeCharakteristiky, VlajkaText, ZnakText, NutsLau, Geometrie]
+2026-03-27 18:23:11 [main] WARN  c.s.etl.extract.RuianVfrExtractor - VFR Obec[2] kod=2003 fkKod=3601 children=[Kod, Nazev, StatusKod, Okres, Pou, PlatiOd, IdTransakce, GlobalniIdNavrhuZmeny, MluvnickeCharakteristiky, VlajkaText, ZnakText, NutsLau, Geometrie]
+2026-03-27 18:23:12 [main] INFO  c.s.etl.extract.RuianVfrExtractor - VFR parsed: 14 kraj, 76 okres, 6258 obec, 15106 cast_obce, 0 ZSJ (0 with geometry)
+2026-03-27 18:23:12 [main] INFO  com.sreality.etl.Main - VFR: downloaded=true, snapshot=2026-02-28, lastStored=2026-02-28, isNewer=false
+2026-03-27 18:23:12 [main] INFO  com.sreality.etl.Main - Using VFR as dimension source (14 kraj, 76 okres, 6258 obec, 15106 cast_obce, 0 ZSJ)
+2026-03-27 18:23:12 [main] INFO  com.sreality.etl.Main - === EXTRACT CSU ===
+2026-03-27 18:23:12 [main] INFO  c.sreality.etl.extract.CsuExtractor - CSU: trying DataStat JSON API...
+2026-03-27 18:23:12 [main] INFO  c.sreality.etl.extract.CsuExtractor -   DataStat query: https://data.csu.gov.cz/api/dotaz/400779
+2026-03-27 18:23:12 [main] WARN  c.sreality.etl.extract.CsuExtractor - CSU DataStat API failed: HTTP 404 from https://data.csu.gov.cz/api/dotaz/400779
+2026-03-27 18:23:12 [main] INFO  c.sreality.etl.extract.CsuExtractor - CSU: trying CSV: https://csu.gov.cz/docs/107508/pocet-obyvatel-v-obcich-k-1-1-2025.csv
+2026-03-27 18:23:12 [main] WARN  c.sreality.etl.extract.CsuExtractor -   CSV download failed for https://csu.gov.cz/docs/107508/pocet-obyvatel-v-obcich-k-1-1-2025.csv: HTTP 404 from https://csu.gov.cz/docs/107508/pocet-obyvatel-v-obcich-k-1-1-2025.csv
+2026-03-27 18:23:12 [main] INFO  c.sreality.etl.extract.CsuExtractor - CSU: trying CSV: https://csu.gov.cz/docs/107508/pocet-obyvatel-v-obcich-k-1-1-2024.csv
+2026-03-27 18:23:12 [main] WARN  c.sreality.etl.extract.CsuExtractor -   CSV download failed for https://csu.gov.cz/docs/107508/pocet-obyvatel-v-obcich-k-1-1-2024.csv: HTTP 404 from https://csu.gov.cz/docs/107508/pocet-obyvatel-v-obcich-k-1-1-2024.csv
+2026-03-27 18:23:12 [main] INFO  c.sreality.etl.extract.CsuExtractor - CSU: trying data.gov.cz fallback CSV...
+2026-03-27 18:23:12 [main] WARN  c.sreality.etl.extract.CsuExtractor -   CSV download failed for https://data.gov.cz/soubor/pocet-obyvatel-v-obcich.csv: HTTP 404 from https://data.gov.cz/soubor/pocet-obyvatel-v-obcich.csv
+2026-03-27 18:23:12 [main] WARN  c.sreality.etl.extract.CsuExtractor - CSU: all sources exhausted — ETL continues without demographic enrichment. Set CSU_DEMOGRAPHICS_URL in .env to provide a working CSV URL.
+2026-03-27 18:23:12 [main] INFO  com.sreality.etl.Main - === TRANSFORM DIMENSIONS ===
+2026-03-27 18:23:12 [main] INFO  c.s.etl.transform.DimensionBuilder - DimKraj: 8 records (14 from RUIAN + synthetic)
+2026-03-27 18:23:12 [main] INFO  c.s.etl.transform.DimensionBuilder - Synthesized okres row for obec with null okres: kod=SYNT_19, nazev=Praha
+2026-03-27 18:23:12 [main] INFO  c.s.etl.transform.DimensionBuilder - DimOkres: 77 records (76 from RUIAN, 1 synthetic)
+2026-03-27 18:23:12 [main] INFO  c.sreality.etl.extract.MpsvExtractor - MPSV: fetching unemployment from https://data.mpsv.cz/od/soubory/msmt/nezamestnanost-dle-okresu.json
+2026-03-27 18:23:12 [main] WARN  c.sreality.etl.extract.MpsvExtractor - MPSV JSON failed for https://data.mpsv.cz/od/soubory/msmt/nezamestnanost-dle-okresu.json: HTTP 404 from https://data.mpsv.cz/od/soubory/msmt/nezamestnanost-dle-okresu.json
+2026-03-27 18:23:12 [main] INFO  c.sreality.etl.extract.MpsvExtractor - MPSV: trying data.gov.cz CSV fallback: https://data.gov.cz/soubor/mira-nezamestnanosti-okresy.csv
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.extract.MpsvExtractor -   MPSV CSV failed for https://data.gov.cz/soubor/mira-nezamestnanosti-okresy.csv: HTTP 404 from https://data.gov.cz/soubor/mira-nezamestnanosti-okresy.csv
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.extract.MpsvExtractor - MPSV: all sources exhausted — unemployment_pct will be null in dim_obec. Set MPSV_UNEMPLOYMENT_URL in .env to override.
+2026-03-27 18:23:13 [main] INFO  com.sreality.etl.Main - MPSV: 0 okres unemployment records
+2026-03-27 18:23:13 [main] INFO  c.s.etl.transform.DimensionBuilder - DimObec: 393 unique records (0 with demographics, 0 with unemployment, 1 with synthetic okres)
+2026-03-27 18:23:13 [main] INFO  c.s.etl.transform.DimensionBuilder - DimCastObce: 15106 unique records
+2026-03-27 18:23:13 [main] INFO  com.sreality.etl.Main - === LOAD DIMENSIONS ===
+2026-03-27 18:23:13 [main] INFO  c.sreality.etl.load.PostgresLoader - Upserted 8 kraj rows
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertOkres: skipping okres 'Třebíč' (kod=3710) — no dim_kraj row for kodVusc='108'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertOkres: skipping okres 'Uherské Hradiště' (kod=3711) — no dim_kraj row for kodVusc='141'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertOkres: skipping okres 'Vyškov' (kod=3712) — no dim_kraj row for kodVusc='116'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertOkres: skipping okres 'Znojmo' (kod=3713) — no dim_kraj row for kodVusc='116'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertOkres: skipping okres 'Žďár nad Sázavou' (kod=3714) — no dim_kraj row for kodVusc='108'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertOkres: skipping okres 'Karviná' (kod=3803) — no dim_kraj row for kodVusc='132'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertOkres: skipping okres 'Chrudim' (kod=3603) — no dim_kraj row for kodVusc='94'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertOkres: skipping okres 'Nový Jičín' (kod=3804) — no dim_kraj row for kodVusc='132'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertOkres: skipping okres 'Olomouc' (kod=3805) — no dim_kraj row for kodVusc='124'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertOkres: skipping okres 'Havlíčkův Brod' (kod=3601) — no dim_kraj row for kodVusc='108'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertOkres: skipping okres 'Opava' (kod=3806) — no dim_kraj row for kodVusc='132'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertOkres: skipping okres 'Ostrava-město' (kod=3807) — no dim_kraj row for kodVusc='132'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertOkres: skipping okres 'Přerov' (kod=3808) — no dim_kraj row for kodVusc='124'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertOkres: skipping okres 'Šumperk' (kod=3809) — no dim_kraj row for kodVusc='124'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertOkres: skipping okres 'Svitavy' (kod=3609) — no dim_kraj row for kodVusc='94'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertOkres: skipping okres 'Pardubice' (kod=3606) — no dim_kraj row for kodVusc='94'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertOkres: skipping okres 'Bruntál' (kod=3801) — no dim_kraj row for kodVusc='132'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertOkres: skipping okres 'Frýdek-Místek' (kod=3802) — no dim_kraj row for kodVusc='132'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertOkres: skipping okres 'Ústí nad Orlicí' (kod=3611) — no dim_kraj row for kodVusc='94'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertOkres: skipping okres 'Vsetín' (kod=3810) — no dim_kraj row for kodVusc='141'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertOkres: skipping okres 'Jeseník' (kod=3811) — no dim_kraj row for kodVusc='124'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertOkres: skipping okres 'Břeclav' (kod=3704) — no dim_kraj row for kodVusc='116'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertOkres: skipping okres 'Zlín' (kod=3705) — no dim_kraj row for kodVusc='141'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertOkres: skipping okres 'Hodonín' (kod=3706) — no dim_kraj row for kodVusc='116'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertOkres: skipping okres 'Pelhřimov' (kod=3304) — no dim_kraj row for kodVusc='108'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertOkres: skipping okres 'Jihlava' (kod=3707) — no dim_kraj row for kodVusc='108'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertOkres: skipping okres 'Kroměříž' (kod=3708) — no dim_kraj row for kodVusc='141'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertOkres: skipping okres 'Prostějov' (kod=3709) — no dim_kraj row for kodVusc='124'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertOkres: skipping okres 'Blansko' (kod=3701) — no dim_kraj row for kodVusc='116'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertOkres: skipping okres 'Brno-město' (kod=3702) — no dim_kraj row for kodVusc='116'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertOkres: skipping okres 'Brno-venkov' (kod=3703) — no dim_kraj row for kodVusc='116'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertOkres: 31 okres rows skipped (kraj not found) — check RUIAN vusc codes
+2026-03-27 18:23:13 [main] INFO  c.sreality.etl.load.PostgresLoader - Upserted 46 okres rows (31 skipped)
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertObec: skipping obec 'Mikolajice' (kod=3760) — no dim_okres row for kodOkresu='3806'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertObec: skipping obec 'Štramberk' (kod=3638) — no dim_okres row for kodOkresu='3804'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertObec: skipping obec 'Malenovice' (kod=3514) — no dim_okres row for kodOkresu='3802'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertObec: skipping obec 'Žamberk' (kod=2666) — no dim_okres row for kodOkresu='3611'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertObec: skipping obec 'Štěpánkovice' (kod=3751) — no dim_okres row for kodOkresu='3806'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertObec: skipping obec 'Lačnov' (kod=3875) — no dim_okres row for kodOkresu='3810'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertObec: skipping obec 'Horní Bečva' (kod=3891) — no dim_okres row for kodOkresu='3810'
+2026-03-27 18:23:13 [main] WARN  c.sreality.etl.load.PostgresLoader - upsertObec: skipping obec 'Řetová' (kod=2682) — no dim_okres row for kodOkresu='3611'

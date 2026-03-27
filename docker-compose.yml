@@ -123,6 +123,11 @@ services:
       # Processing
       ETL_BATCH_SIZE: ${ETL_BATCH_SIZE:-500}
       ETL_HTTP_TIMEOUT_MS: ${ETL_HTTP_TIMEOUT_MS:-60000}
+      # Demographics (optional — defaults point to Czech open data)
+      CSU_DEMOGRAPHICS_URL: ${CSU_DEMOGRAPHICS_URL:-}
+      DATASTAT_QUERY_POPULATION: ${DATASTAT_QUERY_POPULATION:-400779}
+      DATASTAT_QUERY_AVG_AGE: ${DATASTAT_QUERY_AVG_AGE:-400839}
+      MPSV_UNEMPLOYMENT_URL: ${MPSV_UNEMPLOYMENT_URL:-}
     volumes:
       - etl-logs:/app/logs
     networks:

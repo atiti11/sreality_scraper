@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sreality DW — Database Schema</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; background: #f4f4f0; color: #1a1a18; padding: 32px 24px 64px; }
+  h1 { font-size: 22px; font-weight: 600; margin-bottom: 4px; color: #1a1a18; }
+  .subtitle { font-size: 13px; color: #666; margin-bottom: 28px; }
+  .toolbar { display: flex; gap: 10px; margin-bottom: 24px; flex-wrap: wrap; align-items: center; }
+  button { padding: 8px 18px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; transition: opacity .15s; }
+  button:hover { opacity: .85; }
+  .btn-primary { background: #534AB7; color: #fff; }
+  .btn-secondary { background: #e2e0d8; color: #2c2c2a; }
+  .legend { display: flex; gap: 18px; margin-left: auto; align-items: center; flex-wrap: wrap; }
+  .leg { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #555; }
+  .leg-dot { width: 12px; height: 12px; border-radius: 3px; }
+  .dot-dim  { background: #EEEDFE; border: 1.5px solid #534AB7; }
+  .dot-fact { background: #E1F5EE; border: 1.5px solid #0F6E56; }
+  .dot-ctrl { background: #F1EFE8; border: 1.5px solid #5F5E5A; }
+
+  #diagram { background: #fff; border-radius: 12px; border: 1px solid #dddbd2; overflow: auto; padding: 32px; min-height: 400px; }
+
+  .erd { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+  @media (max-width: 900px) { .erd { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 560px) { .erd { grid-template-columns: 1fr; } }
+
+  .table-card { border-radius: 8px; overflow: hidden; border: 1.5px solid; font-size: 12.5px; break-inside: avoid; }
+  .table-card.dim  { border-color: #534AB7; }
+  .table-card.fact { border-color: #0F6E56; }
+  .table-card.ctrl { border-color: #888780; }
+
+  .table-header { padding: 8px 12px; font-weight: 600; font-size: 13px; }
+  .table-card.dim  .table-header { background: #EEEDFE; color: #26215C; }
+  .table-card.fact .table-header { background: #E1F5EE; color: #04342C; }
+  .table-card.ctrl .table-header { background: #F1EFE8; color: #2C2C2A; }
+
+  .table-header .tag { font-size: 10px; font-weight: 500; padding: 1px 6px; border-radius: 3px; margin-left: 6px; vertical-align: middle; }
+  .table-card.dim  .tag { background: #CECBF6; color: #26215C; }
+  .table-card.fact .tag { background: #9FE1CB; color: #04342C; }
+  .table-card.ctrl .tag { background: #D3D1C7; color: #2C2C2A; }
+
+  .field { display: flex; justify-content: space-between; align-items: center; padding: 4px 12px; border-top: 1px solid #f0ede6; gap: 8px; }
+  .field:hover { background: #faf9f6; }
+  .field-name { font-family: 'Courier New', monospace; font-size: 11.5px; color: #1a1a18; white-space: nowrap; }
+  .field-name.pk { color: #B06010; font-weight: 700; }
+  .field-name.fk { color: #185FA5; }
+  .field-name.uk { color: #3B6D11; }
+  .field-type { font-size: 11px; color: #888; white-space: nowrap; }
+  .badge { font-size: 9.5px; padding: 1px 5px; border-radius: 3px; font-weight: 600; flex-shrink: 0; }
+  .badge.pk { background: #FAEEDA; color: #633806; }
+  .badge.fk { background: #E6F1FB; color: #0C447C; }
+  .badge.uk { background: #EAF3DE; color: #27500A; }
+
+  .rel-section { margin-top: 28px; }
+  .rel-section h2 { font-size: 14px; font-weight: 600; color: #444; margin-bottom: 12px; }
+  .rel-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px; }
+  .rel-row { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 5px 10px; background: #faf9f6; border-radius: 6px; border: 1px solid #e8e5dc; }
+  .rel-from { font-family: monospace; color: #26215C; font-weight: 600; }
+  .rel-to   { font-family: monospace; color: #04342C; font-weight: 600; }
+  .rel-via  { font-family: monospace; color: #185FA5; font-size: 11px; background: #E6F1FB; padding: 1px 5px; border-radius: 3px; }
+  .rel-card { color: #888; font-size: 11px; white-space: nowrap; }
+
+  @media print {
+    body { background: #fff; padding: 16px; }
+    .toolbar { display: none !important; }
+    #diagram { border: none; padding: 0; box-shadow: none; }
+    .erd { grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .field { padding: 3px 10px; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Sreality DW — Database Schema</h1>
+<p class="subtitle">Data warehouse schema &nbsp;&middot;&nbsp; schema: <code>dw</code> &nbsp;&middot;&nbsp; generated from ETL source</p>
+
+<div class="toolbar">
+  <button class="btn-primary" onclick="window.print()">&#8659; Export / Print (PDF)</button>
+  <button class="btn-secondary" onclick="saveHTML()">&#8659; Save as HTML</button>
+  <div class="legend">
+    <div class="leg"><div class="leg-dot dot-dim"></div> Dimension</div>
+    <div class="leg"><div class="leg-dot dot-fact"></div> Fact</div>
+    <div class="leg"><div class="leg-dot dot-ctrl"></div> Control</div>
+  </div>
+</div>
+
+<div id="diagram">
+  <div class="erd">
+
+    <div class="table-card dim">
+      <div class="table-header">dim_kraj <span class="tag">DIM</span></div>
+      <div class="field"><span class="field-name pk">id</span><span class="field-type">serial</span><span class="badge pk">PK</span></div>
+      <div class="field"><span class="field-name uk">kod_kraje</span><span class="field-type">varchar(20)</span><span class="badge uk">UK</span></div>
+      <div class="field"><span class="field-name">nazev_kraje</span><span class="field-type">varchar(100)</span></div>
+    </div>
+
+    <div class="table-card dim">
+      <div class="table-header">dim_okres <span class="tag">DIM</span></div>
+      <div class="field"><span class="field-name pk">id</span><span class="field-type">serial</span><span class="badge pk">PK</span></div>
+      <div class="field"><span class="field-name uk">kod_okresu</span><span class="field-type">varchar(20)</span><span class="badge uk">UK</span></div>
+      <div class="field"><span class="field-name">nazev_okresu</span><span class="field-type">varchar(100)</span></div>
+      <div class="field"><span class="field-name fk">kraj_id</span><span class="field-type">int NN</span><span class="badge fk">FK</span></div>
+    </div>
+
+    <div class="table-card dim">
+      <div class="table-header">dim_obec <span class="tag">DIM</span></div>
+      <div class="field"><span class="field-name pk">id</span><span class="field-type">serial</span><span class="badge pk">PK</span></div>
+      <div class="field"><span class="field-name uk">kod_obce</span><span class="field-type">varchar(20)</span><span class="badge uk">UK</span></div>
+      <div class="field"><span class="field-name">nazev_obce</span><span class="field-type">varchar(100)</span></div>
+      <div class="field"><span class="field-name fk">okres_id</span><span class="field-type">int NN</span><span class="badge fk">FK</span></div>
+      <div class="field"><span class="field-name">population</span><span class="field-type">int</span></div>
+      <div class="field"><span class="field-name">population_density</span><span class="field-type">numeric(10,2)</span></div>
+      <div class="field"><span class="field-name">area_km2</span><span class="field-type">numeric(10,2)</span></div>
+      <div class="field"><span class="field-name">avg_age</span><span class="field-type">numeric(5,2)</span></div>
+      <div class="field"><span class="field-name">unemployment_pct</span><span class="field-type">numeric(5,2)</span></div>
+    </div>
+
+    <div class="table-card dim">
+      <div class="table-header">dim_cast_obce <span class="tag">DIM</span></div>
+      <div class="field"><span class="field-name pk">id</span><span class="field-type">serial</span><span class="badge pk">PK</span></div>
+      <div class="field"><span class="field-name uk">kod_cast_obce</span><span class="field-type">varchar(20)</span><span class="badge uk">UK</span></div>
+      <div class="field"><span class="field-name">nazev_cast_obce</span><span class="field-type">varchar(100)</span></div>
+      <div class="field"><span class="field-name fk">obec_id</span><span class="field-type">int NN</span><span class="badge fk">FK</span></div>
+    </div>
+
+    <div class="table-card dim">
+      <div class="table-header">dim_agency <span class="tag">DIM</span></div>
+      <div class="field"><span class="field-name pk">id</span><span class="field-type">serial</span><span class="badge pk">PK</span></div>
+      <div class="field"><span class="field-name uk">sreality_id</span><span class="field-type">int</span><span class="badge uk">UK</span></div>
+      <div class="field"><span class="field-name">name</span><span class="field-type">varchar(200)</span></div>
+      <div class="field"><span class="field-name">url</span><span class="field-type">varchar(500)</span></div>
+    </div>
+
+    <div class="table-card dim">
+      <div class="table-header">dim_date <span class="tag">DIM</span></div>
+      <div class="field"><span class="field-name pk">date_id</span><span class="field-type">int</span><span class="badge pk">PK</span></div>
+      <div class="field"><span class="field-name">full_date</span><span class="field-type">date</span></div>
+      <div class="field"><span class="field-name">year</span><span class="field-type">int</span></div>
+      <div class="field"><span class="field-name">quarter</span><span class="field-type">int</span></div>
+      <div class="field"><span class="field-name">month</span><span class="field-type">int</span></div>
+      <div class="field"><span class="field-name">month_name</span><span class="field-type">varchar(20)</span></div>
+      <div class="field"><span class="field-name">week</span><span class="field-type">int</span></div>
+      <div class="field"><span class="field-name">day_of_week</span><span class="field-type">int</span></div>
+      <div class="field"><span class="field-name">is_weekend</span><span class="field-type">boolean</span></div>
+    </div>
+
+    <div class="table-card fact">
+      <div class="table-header">fact_sale_snapshot <span class="tag">FACT</span></div>
+      <div class="field"><span class="field-name pk">id</span><span class="field-type">bigserial</span><span class="badge pk">PK</span></div>
+      <div class="field"><span class="field-name">hash_id</span><span class="field-type">bigint</span></div>
+      <div class="field"><span class="field-name">sreality_url</span><span class="field-type">varchar(200)</span></div>
+      <div class="field"><span class="field-name">property_type</span><span class="field-type">varchar(50)</span></div>
+      <div class="field"><span class="field-name">sub_category</span><span class="field-type">varchar(20)</span></div>
+      <div class="field"><span class="field-name">valid_from</span><span class="field-type">date NN</span></div>
+      <div class="field"><span class="field-name">valid_to</span><span class="field-type">date</span></div>
+      <div class="field"><span class="field-name fk">cast_obce_id</span><span class="field-type">int</span><span class="badge fk">FK</span></div>
+      <div class="field"><span class="field-name fk">obec_id</span><span class="field-type">int NN</span><span class="badge fk">FK</span></div>
+      <div class="field"><span class="field-name fk">agency_id</span><span class="field-type">int</span><span class="badge fk">FK</span></div>
+      <div class="field"><span class="field-name fk">date_id</span><span class="field-type">int</span><span class="badge fk">FK</span></div>
+      <div class="field"><span class="field-name">price_asked_czk</span><span class="field-type">bigint</span></div>
+      <div class="field"><span class="field-name">price_asked_per_m2</span><span class="field-type">numeric(12,2)</span></div>
+      <div class="field"><span class="field-name">usable_area_m2</span><span class="field-type">numeric(10,2)</span></div>
+      <div class="field"><span class="field-name">floor_number / total_floors</span><span class="field-type">int</span></div>
+      <div class="field"><span class="field-name">gps_lat / gps_lon</span><span class="field-type">numeric(10,6)</span></div>
+      <div class="field"><span class="field-name">ownership_label</span><span class="field-type">varchar(50)</span></div>
+      <div class="field"><span class="field-name">building_type_label</span><span class="field-type">varchar(50)</span></div>
+      <div class="field"><span class="field-name">building_condition_label</span><span class="field-type">varchar(100)</span></div>
+      <div class="field"><span class="field-name">energy_rating_label</span><span class="field-type">varchar(100)</span></div>
+      <div class="field"><span class="field-name">is_new_building / is_furnished</span><span class="field-type">boolean</span></div>
+      <div class="field"><span class="field-name">has_balcony / terrace / loggia</span><span class="field-type">boolean</span></div>
+      <div class="field"><span class="field-name">has_cellar / elevator / garage</span><span class="field-type">boolean</span></div>
+      <div class="field"><span class="field-name">has_parking / pool</span><span class="field-type">boolean</span></div>
+      <div class="field"><span class="field-name">is_barrier_free / is_active</span><span class="field-type">boolean</span></div>
+      <div class="field"><span class="field-name">first_seen_date</span><span class="field-type">date</span></div>
+      <div class="field"><span class="field-name">advert_images_count</span><span class="field-type">int</span></div>
+      <div class="field"><span class="field-name">has_floor_plan / has_video</span><span class="field-type">boolean</span></div>
+    </div>
+
+    <div class="table-card fact">
+      <div class="table-header">fact_rent_snapshot <span class="tag">FACT</span></div>
+      <div class="field"><span class="field-name pk">id</span><span class="field-type">bigserial</span><span class="badge pk">PK</span></div>
+      <div class="field"><span class="field-name">hash_id</span><span class="field-type">bigint</span></div>
+      <div class="field"><span class="field-name">sreality_url</span><span class="field-type">varchar(200)</span></div>
+      <div class="field"><span class="field-name">property_type</span><span class="field-type">varchar(50)</span></div>
+      <div class="field"><span class="field-name">sub_category</span><span class="field-type">varchar(20)</span></div>
+      <div class="field"><span class="field-name">valid_from</span><span class="field-type">date NN</span></div>
+      <div class="field"><span class="field-name">valid_to</span><span class="field-type">date</span></div>
+      <div class="field"><span class="field-name fk">cast_obce_id</span><span class="field-type">int</span><span class="badge fk">FK</span></div>
+      <div class="field"><span class="field-name fk">obec_id</span><span class="field-type">int NN</span><span class="badge fk">FK</span></div>
+      <div class="field"><span class="field-name fk">agency_id</span><span class="field-type">int</span><span class="badge fk">FK</span></div>
+      <div class="field"><span class="field-name fk">date_id</span><span class="field-type">int</span><span class="badge fk">FK</span></div>
+      <div class="field"><span class="field-name">price_monthly_czk</span><span class="field-type">bigint</span></div>
+      <div class="field"><span class="field-name">price_monthly_per_m2</span><span class="field-type">numeric(10,2)</span></div>
+      <div class="field"><span class="field-name">usable_area_m2</span><span class="field-type">numeric(10,2)</span></div>
+      <div class="field"><span class="field-name">floor_number / total_floors</span><span class="field-type">int</span></div>
+      <div class="field"><span class="field-name">gps_lat / gps_lon</span><span class="field-type">numeric(10,6)</span></div>
+      <div class="field"><span class="field-name">ownership_label</span><span class="field-type">varchar(50)</span></div>
+      <div class="field"><span class="field-name">building_type_label</span><span class="field-type">varchar(50)</span></div>
+      <div class="field"><span class="field-name">building_condition_label</span><span class="field-type">varchar(100)</span></div>
+      <div class="field"><span class="field-name">energy_rating_label</span><span class="field-type">varchar(100)</span></div>
+      <div class="field"><span class="field-name">is_new_building / is_furnished</span><span class="field-type">boolean</span></div>
+      <div class="field"><span class="field-name">has_balcony / terrace / loggia</span><span class="field-type">boolean</span></div>
+      <div class="field"><span class="field-name">has_cellar / elevator / garage</span><span class="field-type">boolean</span></div>
+      <div class="field"><span class="field-name">has_parking / pool</span><span class="field-type">boolean</span></div>
+      <div class="field"><span class="field-name">is_barrier_free / is_active</span><span class="field-type">boolean</span></div>
+      <div class="field"><span class="field-name">first_seen_date</span><span class="field-type">date</span></div>
+      <div class="field"><span class="field-name">advert_images_count</span><span class="field-type">int</span></div>
+      <div class="field"><span class="field-name">has_floor_plan / has_video</span><span class="field-type">boolean</span></div>
+    </div>
+
+    <div class="table-card fact">
+      <div class="table-header">fact_auction_snapshot <span class="tag">FACT</span></div>
+      <div class="field"><span class="field-name pk">id</span><span class="field-type">bigserial</span><span class="badge pk">PK</span></div>
+      <div class="field"><span class="field-name">hash_id</span><span class="field-type">bigint</span></div>
+      <div class="field"><span class="field-name">sreality_url</span><span class="field-type">varchar(200)</span></div>
+      <div class="field"><span class="field-name">property_type</span><span class="field-type">varchar(50)</span></div>
+      <div class="field"><span class="field-name">valid_from</span><span class="field-type">date NN</span></div>
+      <div class="field"><span class="field-name">valid_to</span><span class="field-type">date</span></div>
+      <div class="field"><span class="field-name fk">cast_obce_id</span><span class="field-type">int</span><span class="badge fk">FK</span></div>
+      <div class="field"><span class="field-name fk">obec_id</span><span class="field-type">int NN</span><span class="badge fk">FK</span></div>
+      <div class="field"><span class="field-name fk">agency_id</span><span class="field-type">int</span><span class="badge fk">FK</span></div>
+      <div class="field"><span class="field-name fk">date_id</span><span class="field-type">int</span><span class="badge fk">FK</span></div>
+      <div class="field"><span class="field-name">price_starting_bid_czk</span><span class="field-type">bigint</span></div>
+      <div class="field"><span class="field-name">usable_area_m2</span><span class="field-type">numeric(10,2)</span></div>
+      <div class="field"><span class="field-name">floor_number / total_floors</span><span class="field-type">int</span></div>
+      <div class="field"><span class="field-name">gps_lat / gps_lon</span><span class="field-type">numeric(10,6)</span></div>
+      <div class="field"><span class="field-name">ownership_label</span><span class="field-type">varchar(50)</span></div>
+      <div class="field"><span class="field-name">building_type_label</span><span class="field-type">varchar(50)</span></div>
+      <div class="field"><span class="field-name">building_condition_label</span><span class="field-type">varchar(100)</span></div>
+      <div class="field"><span class="field-name">energy_rating_label</span><span class="field-type">varchar(100)</span></div>
+      <div class="field"><span class="field-name">is_new_building / is_furnished</span><span class="field-type">boolean</span></div>
+      <div class="field"><span class="field-name">has_balcony / terrace / loggia</span><span class="field-type">boolean</span></div>
+      <div class="field"><span class="field-name">has_cellar / elevator / garage</span><span class="field-type">boolean</span></div>
+      <div class="field"><span class="field-name">has_parking / pool</span><span class="field-type">boolean</span></div>
+      <div class="field"><span class="field-name">is_barrier_free / is_active</span><span class="field-type">boolean</span></div>
+      <div class="field"><span class="field-name">first_seen_date</span><span class="field-type">date</span></div>
+      <div class="field"><span class="field-name">advert_images_count</span><span class="field-type">int</span></div>
+      <div class="field"><span class="field-name">has_floor_plan / has_video</span><span class="field-type">boolean</span></div>
+    </div>
+
+    <div class="table-card ctrl">
+      <div class="table-header">ruian_snapshot <span class="tag">CTRL</span></div>
+      <div class="field"><span class="field-name pk">id</span><span class="field-type">int</span><span class="badge pk">PK</span></div>
+      <div class="field"><span class="field-name">snapshot_date</span><span class="field-type">date NN</span></div>
+      <div class="field"><span class="field-name">loaded_at</span><span class="field-type">timestamp NN</span></div>
+      <div class="field"><span class="field-name">zsj_count</span><span class="field-type">int</span></div>
+    </div>
+
+  </div>
+
+  <div class="rel-section">
+    <h2>Relationships</h2>
+    <div class="rel-grid">
+      <div class="rel-row"><span class="rel-from">dim_kraj</span><span class="rel-card">1 --&lt; N</span><span class="rel-to">dim_okres</span><span class="rel-via">kraj_id</span></div>
+      <div class="rel-row"><span class="rel-from">dim_okres</span><span class="rel-card">1 --&lt; N</span><span class="rel-to">dim_obec</span><span class="rel-via">okres_id</span></div>
+      <div class="rel-row"><span class="rel-from">dim_obec</span><span class="rel-card">1 --&lt; N</span><span class="rel-to">dim_cast_obce</span><span class="rel-via">obec_id</span></div>
+      <div class="rel-row"><span class="rel-from">dim_obec</span><span class="rel-card">1 --&lt; N</span><span class="rel-to">fact_sale_snapshot</span><span class="rel-via">obec_id NN</span></div>
+      <div class="rel-row"><span class="rel-from">dim_obec</span><span class="rel-card">1 --&lt; N</span><span class="rel-to">fact_rent_snapshot</span><span class="rel-via">obec_id NN</span></div>
+      <div class="rel-row"><span class="rel-from">dim_obec</span><span class="rel-card">1 --&lt; N</span><span class="rel-to">fact_auction_snapshot</span><span class="rel-via">obec_id NN</span></div>
+      <div class="rel-row"><span class="rel-from">dim_cast_obce</span><span class="rel-card">0..1 --&lt; N</span><span class="rel-to">fact_sale_snapshot</span><span class="rel-via">cast_obce_id</span></div>
+      <div class="rel-row"><span class="rel-from">dim_cast_obce</span><span class="rel-card">0..1 --&lt; N</span><span class="rel-to">fact_rent_snapshot</span><span class="rel-via">cast_obce_id</span></div>
+      <div class="rel-row"><span class="rel-from">dim_cast_obce</span><span class="rel-card">0..1 --&lt; N</span><span class="rel-to">fact_auction_snapshot</span><span class="rel-via">cast_obce_id</span></div>
+      <div class="rel-row"><span class="rel-from">dim_agency</span><span class="rel-card">0..1 --&lt; N</span><span class="rel-to">fact_sale_snapshot</span><span class="rel-via">agency_id</span></div>
+      <div class="rel-row"><span class="rel-from">dim_agency</span><span class="rel-card">0..1 --&lt; N</span><span class="rel-to">fact_rent_snapshot</span><span class="rel-via">agency_id</span></div>
+      <div class="rel-row"><span class="rel-from">dim_agency</span><span class="rel-card">0..1 --&lt; N</span><span class="rel-to">fact_auction_snapshot</span><span class="rel-via">agency_id</span></div>
+      <div class="rel-row"><span class="rel-from">dim_date</span><span class="rel-card">0..1 --&lt; N</span><span class="rel-to">fact_sale_snapshot</span><span class="rel-via">date_id</span></div>
+      <div class="rel-row"><span class="rel-from">dim_date</span><span class="rel-card">0..1 --&lt; N</span><span class="rel-to">fact_rent_snapshot</span><span class="rel-via">date_id</span></div>
+      <div class="rel-row"><span class="rel-from">dim_date</span><span class="rel-card">0..1 --&lt; N</span><span class="rel-to">fact_auction_snapshot</span><span class="rel-via">date_id</span></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function saveHTML() {
+  const blob = new Blob([document.documentElement.outerHTML], { type: 'text/html' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'sreality_dw_schema.html';
+  a.click();
+}
+</script>
+</body>
+</html>

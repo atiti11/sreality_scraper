@@ -3,6 +3,7 @@ package com.sreality.etl;
 import com.sreality.etl.config.EtlConfig;
 import com.sreality.etl.extract.CsuExtractor;
 import com.sreality.etl.extract.MongoExtractor;
+import com.sreality.etl.extract.MpsvExtractor;
 import com.sreality.etl.extract.RuianExtractor;
 import com.sreality.etl.extract.RuianVfrExtractor;
 import com.sreality.etl.extract.RuianVfrExtractor.VfrResult;
@@ -75,23 +76,32 @@ public class Main {
             List<DimCastObce> castObceRaw;
             List<RuianVfrExtractor.ZsjRecord> zsjRecords;
 
+            // The VFR state file (ST_UKSG) only contains ~393 unique obec at the
+            // state level — the remaining 5865 municipalities are only in per-municipality
+            // OB_XXXXXX files. We therefore use a HYBRID strategy:
+            //   VFR  → kraj + okres (hierarchy codes are correct here)
+            //   ArcGIS → obec + cast_obce (returns all 6258 with polygons)
+            //
+            // If VFR is unavailable, fall back to ArcGIS for all four dimensions.
+            RuianExtractor arcgis = new RuianExtractor(config);
+
             if (vfr != null) {
-                log.info("Using VFR as dimension source ({} kraj, {} okres, {} obec, {} cast_obce, {} ZSJ)",
-                    vfr.kraj().size(), vfr.okres().size(),
-                    vfr.obec().size(), vfr.castObce().size(), vfr.zsj().size());
+                log.info("Hybrid mode: VFR for kraj/okres, ArcGIS for obec/cast_obce");
                 krajRaw     = vfr.kraj();
                 okresRaw    = vfr.okres();
-                obecRaw     = vfr.obec();
-                castObceRaw = vfr.castObce();
-                zsjRecords  = vfr.zsj();
+                log.info("VFR: {} kraj, {} okres", krajRaw.size(), okresRaw.size());
+                log.info("=== EXTRACT RUIAN ARCGIS (obec + cast_obce) ===");
+                obecRaw     = arcgis.extractObec();
+                castObceRaw = arcgis.extractCastObce();
+                zsjRecords  = List.of(); // ZSJ not needed — obec polygons from ArcGIS suffice
+                log.info("ArcGIS: {} obec, {} cast_obce", obecRaw.size(), castObceRaw.size());
             } else {
-                log.warn("VFR unavailable — falling back to ArcGIS REST API (no ZSJ spatial join)");
-                RuianExtractor api = new RuianExtractor(config);
-                krajRaw     = api.extractKraj();
-                okresRaw    = api.extractOkres();
-                obecRaw     = api.extractObec();
-                castObceRaw = api.extractCastObce();
-                zsjRecords  = List.of(); // no ZSJ without VFR
+                log.warn("VFR unavailable — using ArcGIS REST API for all dimensions");
+                krajRaw     = arcgis.extractKraj();
+                okresRaw    = arcgis.extractOkres();
+                obecRaw     = arcgis.extractObec();
+                castObceRaw = arcgis.extractCastObce();
+                zsjRecords  = List.of();
             }
 
             // ── Step 3: CSU demographics ──────────────────────────────────────
@@ -104,7 +114,9 @@ public class Main {
             DimensionBuilder dim = new DimensionBuilder();
             List<DimKraj>     krajRows     = dim.buildKraj(krajRaw);
             List<DimOkres>    okresRows    = dim.buildOkres(okresRaw, obecRaw);
-            List<DimObec>     obecRows     = dim.buildObec(obecRaw, demographics);
+            Map<String, Double> unemploymentByOkres = new MpsvExtractor(config).extract();
+            log.info("MPSV: {} okres unemployment records", unemploymentByOkres.size());
+            List<DimObec>     obecRows     = dim.buildObec(obecRaw, demographics, unemploymentByOkres);
             List<DimCastObce> castObceRows = dim.buildCastObce(castObceRaw);
 
             // ── Step 5: Load dimensions (always — keeps dims fresh) ───────────

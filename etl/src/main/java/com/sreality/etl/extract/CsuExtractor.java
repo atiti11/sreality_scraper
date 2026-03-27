@@ -8,6 +8,7 @@ import org.apache.hc.client5.http.classic.methods.HttpGet;
 import org.apache.hc.client5.http.config.RequestConfig;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.client5.http.impl.DefaultRedirectStrategy;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.hc.core5.util.Timeout;
 import org.slf4j.Logger;
@@ -16,34 +17,40 @@ import org.slf4j.LoggerFactory;
 import java.io.ByteArrayInputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Downloads and parses Czech demographic data by municipality (optional enrichment).
+ * Downloads and parses CSU MOS open data CSV to get population per municipality.
  *
- * The CSU CSV URL has historically broken every 1-2 years as CSU migrates
- * their file hosting (czso.cz → csu.gov.cz, new document IDs each year).
- * This extractor treats demographics as OPTIONAL:
- *   - If configured URL returns 404/error → log warning, try fallback URL
- *   - If fallback also fails → log warning, return empty map
- *   - ETL continues normally; dim_obec rows are created with null demographics
+ * SOURCE: CSU MOS open data (opendata.csu.gov.cz)
+ *   URL pattern: https://opendata.csu.gov.cz/soubory/od/od_mos01/mos_data_YYYY.csv
+ *   Format: UTF-8, comma-delimited, quoted fields
+ *   Columns: rok, "kodukaz", "koduzemi", hodnota
  *
- * To provide demographics: set CSU_DEMOGRAPHICS_URL in .env to a working CSV.
- * Expected CSV format: semicolon-delimited, Windows-1250 or UTF-8,
- * columns including kod_obce, pocet_obyvatel, vymera_ha, prumerny_vek
- * (column name matching is case-insensitive and partial).
+ *   kodukaz = "010000" → Počet obyvatel celkem (total population)
+ *   koduzemi = 6-digit RUIAN kod_obce (matches dim_obec.kod_obce directly)
+ *
+ * Tried in order: 2025 file, 2024 file, user-supplied CSU_DEMOGRAPHICS_URL override.
+ * The user override is tried last so it acts as an emergency fallback if CSU
+ * changes the URL structure again.
+ *
+ * Only population is extracted — the MOS dataset does not include area or avg age
+ * at this granularity. Those fields remain null in dim_obec.
  */
 public class CsuExtractor {
 
     private static final Logger log = LoggerFactory.getLogger(CsuExtractor.class);
 
-    // Fallback: Czech national open data portal — may have population data
-    private static final String FALLBACK_URL =
-        "https://data.gov.cz/soubor/pocet-obyvatel-v-obcich.csv";
+    // MOS total-population indicator code (verified from actual CSV data)
+    private static final String MOS_INDICATOR_POPULATION = "010000";
+
+    private static final String MOS_URL_2025 =
+        "https://opendata.csu.gov.cz/soubory/od/od_mos01/mos_data_2025.csv";
+    private static final String MOS_URL_2024 =
+        "https://opendata.csu.gov.cz/soubory/od/od_mos01/mos_data_2024.csv";
 
     private final EtlConfig config;
 
@@ -51,179 +58,157 @@ public class CsuExtractor {
         this.config = config;
     }
 
+    // ── Public entry point ────────────────────────────────────────────────────
+
     /**
-     * Downloads and parses demographic data.
-     * Returns empty map on any failure — demographics are optional enrichment only.
+     * Returns a map of kod_obce (String) → Demographics.
+     * Only population is populated; all other fields are null.
+     * Returns an empty map if all sources fail — ETL continues without demographics.
      */
     public Map<String, Demographics> extract() {
-        // Try configured URL first (if set)
-        if (config.csuDemographicsUrl != null && !config.csuDemographicsUrl.isBlank()) {
-            log.info("Downloading CSU demographics from {}", config.csuDemographicsUrl);
-            try {
-                Map<String, Demographics> result = tryDownload(config.csuDemographicsUrl);
-                if (!result.isEmpty()) {
-                    log.info("CSU demographics: {} records loaded", result.size());
-                    return result;
-                }
-            } catch (Exception e) {
-                log.warn("CSU primary URL failed ({}): {} — trying fallback",
-                    config.csuDemographicsUrl, e.getMessage());
-            }
-        } else {
-            log.info("CSU_DEMOGRAPHICS_URL not configured — trying fallback URL");
-        }
-
-        // Try fallback URL
-        log.info("Trying fallback demographics URL: {}", FALLBACK_URL);
-        try {
-            Map<String, Demographics> result = tryDownload(FALLBACK_URL);
+        for (String url : new String[]{MOS_URL_2025, MOS_URL_2024}) {
+            log.info("CSU: trying MOS CSV: {}", url);
+            Map<String, Demographics> result = downloadAndParse(url);
             if (!result.isEmpty()) {
-                log.info("CSU demographics (fallback): {} records loaded", result.size());
+                log.info("CSU: loaded {} municipality population records from {}", result.size(), url);
                 return result;
             }
-        } catch (Exception e) {
-            log.warn("CSU fallback URL also failed: {}", e.getMessage());
         }
 
-        log.warn("CSU demographics unavailable — ETL will continue without demographic enrichment. " +
-                 "dim_obec rows will have null population/area/avgAge fields. " +
-                 "Set CSU_DEMOGRAPHICS_URL in .env to a working CSV URL to enable enrichment.");
+        // User-supplied URL override (emergency fallback)
+        if (config.csuDemographicsUrl != null && !config.csuDemographicsUrl.isBlank()) {
+            log.info("CSU: trying user-supplied URL: {}", config.csuDemographicsUrl);
+            Map<String, Demographics> result = downloadAndParse(config.csuDemographicsUrl);
+            if (!result.isEmpty()) {
+                log.info("CSU: loaded {} records from user URL", result.size());
+                return result;
+            }
+        }
+
+        log.warn("CSU: all sources failed — ETL continues without demographics. " +
+                 "Set CSU_DEMOGRAPHICS_URL in .env to override.");
         return Collections.emptyMap();
     }
 
-    /**
-     * Downloads and parses a demographics CSV from the given URL.
-     * Tries both Windows-1250 and UTF-8 encodings and both ; and , delimiters.
-     * Returns empty map if nothing parseable found.
-     */
-    private Map<String, Demographics> tryDownload(String url) throws Exception {
-        RequestConfig reqConfig = RequestConfig.custom()
-            .setConnectTimeout(Timeout.ofMilliseconds(config.httpTimeoutMs))
-            .setResponseTimeout(Timeout.ofMilliseconds(config.httpTimeoutMs))
-            .build();
+    // ── CSV download and parse ────────────────────────────────────────────────
 
-        // Download full body as bytes while HTTP connection is still open.
-        // EntityUtils.toByteArray() handles gzip decompression automatically.
-        byte[] rawBytes;
+    /**
+     * Downloads the MOS CSV and extracts the latest population value per obec.
+     *
+     * MOS CSV format (UTF-8, comma-delimited):
+     *   rok,"kodukaz","koduzemi",hodnota
+     *   2024,"010000","500011",1234
+     *
+     * Multiple years may be present in a single file. We keep the highest rok
+     * per koduzemi so we always use the most recent data.
+     */
+    private Map<String, Demographics> downloadAndParse(String url) {
+        try {
+            byte[] raw = httpGet(url);
+            if (raw.length < 100) {
+                log.warn("  CSU: response too small ({} bytes) from {}", raw.length, url);
+                return Collections.emptyMap();
+            }
+            log.info("  CSU: {} KB downloaded", raw.length / 1024);
+
+            Map<String, Integer> popByKod  = new HashMap<>();
+            Map<String, Integer> yearByKod = new HashMap<>();
+
+            CSVFormat fmt = CSVFormat.DEFAULT.builder()
+                .setHeader()
+                .setSkipHeaderRecord(true)
+                .setDelimiter(',')
+                .setIgnoreEmptyLines(true)
+                .setTrim(true)
+                .build();
+
+            try (Reader reader = new InputStreamReader(new ByteArrayInputStream(raw), StandardCharsets.UTF_8);
+                 CSVParser parser = new CSVParser(reader, fmt)) {
+
+                for (CSVRecord rec : parser) {
+                    try {
+                        // Filter: only total-population indicator
+                        String kodukaz = rec.get("kodukaz").replace("\"", "").trim();
+                        if (!MOS_INDICATOR_POPULATION.equals(kodukaz)) continue;
+
+                        // MOS pads koduzemi to 6 digits (e.g. "002020")
+                        // RUIAN stores kod_obce without leading zeros (e.g. "2020")
+                        // Strip leading zeros so the join key matches.
+                        String koduzemi = rec.get("koduzemi").replace("\"", "").trim();
+                        if (koduzemi.isBlank()) continue;
+                        koduzemi = koduzemi.replaceFirst("^0+(?!$)", ""); // strip leading zeros
+
+                        String hodnotaStr = rec.get("hodnota").replace("\"", "").trim();
+                        if (hodnotaStr.isBlank() || "i.d.".equals(hodnotaStr)) continue;
+
+                        int rok     = Integer.parseInt(rec.get("rok").trim());
+                        int hodnota = Integer.parseInt(hodnotaStr);
+                        if (hodnota <= 0) continue;
+
+                        // Keep the most recent year's value
+                        if (rok > yearByKod.getOrDefault(koduzemi, 0)) {
+                            popByKod.put(koduzemi, hodnota);
+                            yearByKod.put(koduzemi, rok);
+                        }
+                    } catch (Exception ignored) {
+                        // Skip malformed rows silently
+                    }
+                }
+            }
+
+            if (popByKod.isEmpty()) {
+                log.warn("  CSU: parsed 0 records — check indicator code or column names in {}", url);
+                return Collections.emptyMap();
+            }
+
+            Map<String, Demographics> result = new HashMap<>();
+            popByKod.forEach((kod, pop) -> result.put(kod, new Demographics(pop)));
+            log.info("  CSU: {} records parsed (latest year per obec)", result.size());
+            return result;
+
+        } catch (Exception e) {
+            log.warn("  CSU: download/parse failed for {}: {}", url, e.getMessage());
+            return Collections.emptyMap();
+        }
+    }
+
+    // ── HTTP ──────────────────────────────────────────────────────────────────
+
+    private byte[] httpGet(String url) throws Exception {
+        RequestConfig rc = RequestConfig.custom()
+            .setConnectTimeout(Timeout.ofMilliseconds(config.httpTimeoutMs))
+            .setResponseTimeout(Timeout.ofMilliseconds(120_000))
+            .build();
         try (CloseableHttpClient http = HttpClients.custom()
-                .setDefaultRequestConfig(reqConfig)
+                .setDefaultRequestConfig(rc)
+                .setRedirectStrategy(DefaultRedirectStrategy.INSTANCE)
                 .build()) {
-            rawBytes = http.execute(new HttpGet(url), response -> {
+            return http.execute(new HttpGet(url), response -> {
                 int code = response.getCode();
-                if (code != 200) throw new RuntimeException("HTTP " + code);
+                if (code != 200) throw new RuntimeException("HTTP " + code + " from " + url);
                 return EntityUtils.toByteArray(response.getEntity());
             });
         }
-
-        log.info("Downloaded {} KB from {}", rawBytes.length / 1024, url);
-
-        // Try charset and delimiter combinations
-        for (Charset charset : new Charset[]{Charset.forName("Windows-1250"), StandardCharsets.UTF_8}) {
-            for (char delimiter : new char[]{';', ','}) {
-                try {
-                    Map<String, Demographics> result = parse(rawBytes, charset, delimiter);
-                    if (!result.isEmpty()) {
-                        log.info("Parsed {} records with charset={}, delimiter='{}'",
-                            result.size(), charset, delimiter);
-                        return result;
-                    }
-                } catch (Exception ignored) {}
-            }
-        }
-        return Collections.emptyMap();
     }
 
-    private Map<String, Demographics> parse(byte[] rawBytes, Charset charset, char delimiter) throws Exception {
-        Map<String, Demographics> result = new HashMap<>();
-        int skipped = 0;
+    // ── Result model ──────────────────────────────────────────────────────────
 
-        CSVFormat format = CSVFormat.DEFAULT.builder()
-            .setHeader()
-            .setSkipHeaderRecord(true)
-            .setDelimiter(delimiter)
-            .setIgnoreEmptyLines(true)
-            .setTrim(true)
-            .build();
-
-        try (Reader reader = new InputStreamReader(new ByteArrayInputStream(rawBytes), charset);
-             CSVParser parser = new CSVParser(reader, format)) {
-
-            Map<String, Integer> headerMap = parser.getHeaderMap();
-            if (headerMap == null || headerMap.isEmpty()) return Collections.emptyMap();
-
-            // Find columns by partial case-insensitive name matching
-            String colKod  = findColumn(headerMap, "kod_obce", "Kód obce",    "kod",      "KOD");
-            String colPop  = findColumn(headerMap, "pocet_obyvatel", "Počet obyvatel", "obyvatel", "OBYV");
-            String colArea = findColumn(headerMap, "vymera_ha", "Výměra v ha","vymera",   "VYMERA");
-            String colAge  = findColumn(headerMap, "prumerny_vek", "Průměrný věk", "vek","VEK");
-
-            if (colKod == null) return Collections.emptyMap(); // wrong format, skip
-
-            for (CSVRecord record : parser) {
-                try {
-                    String kodObce = record.get(colKod);
-                    if (kodObce == null || kodObce.isBlank()) { skipped++; continue; }
-                    kodObce = kodObce.trim();
-
-                    Integer population = colPop  != null ? parseIntCzech(record.get(colPop))      : null;
-                    Double  areaKm2    = colArea != null ? parseHectaresToKm2(record.get(colArea)) : null;
-                    Double  avgAge     = colAge  != null ? parseDoubleCzech(record.get(colAge))    : null;
-                    Double  density    = (population != null && areaKm2 != null && areaKm2 > 0)
-                        ? population / areaKm2 : null;
-
-                    result.put(kodObce, new Demographics(population, density, areaKm2, avgAge, null));
-
-                } catch (Exception e) {
-                    skipped++;
-                }
-            }
-        }
-
-        if (skipped > 0) log.debug("Skipped {} rows during CSU parse", skipped);
-        return result;
-    }
-
-    /** Finds first matching column header (case-insensitive, partial match). */
-    private static String findColumn(Map<String, Integer> headers, String... candidates) {
-        for (String candidate : candidates) {
-            for (String header : headers.keySet()) {
-                if (header.equalsIgnoreCase(candidate) ||
-                    header.toLowerCase().contains(candidate.toLowerCase())) {
-                    return header;
-                }
-            }
-        }
-        return null;
-    }
-
-    // ── Number format transformations ─────────────────────────────────────────
-
-    static Integer parseIntCzech(String raw) {
-        if (raw == null || raw.isBlank()) return null;
-        String cleaned = raw.replace("\u00a0", "").replace(" ", "").replace(",", "").trim();
-        if (cleaned.isEmpty()) return null;
-        try { return Integer.parseInt(cleaned); }
-        catch (Exception e) { return null; }
-    }
-
-    static Double parseDoubleCzech(String raw) {
-        if (raw == null || raw.isBlank()) return null;
-        String cleaned = raw.replace("\u00a0", "").replace(" ", "").replace(",", ".").trim();
-        if (cleaned.isEmpty()) return null;
-        try { return Double.parseDouble(cleaned); }
-        catch (Exception e) { return null; }
-    }
-
-    static Double parseHectaresToKm2(String raw) {
-        Double ha = parseDoubleCzech(raw);
-        return ha != null ? ha * 0.01 : null;
-    }
-
+    /**
+     * Demographic data for one municipality.
+     * Only population is sourced from MOS; other fields remain null.
+     * The unemploymentPct field is kept for API compatibility with DimensionBuilder
+     * (populated separately by MpsvExtractor at okres level).
+     */
     public record Demographics(
         Integer population,
         Double  populationDensity,
         Double  areaKm2,
         Double  avgAge,
         Double  unemploymentPct
-    ) {}
+    ) {
+        /** Convenience constructor: population only, all other fields null. */
+        public Demographics(Integer population) {
+            this(population, null, null, null, null);
+        }
+    }
 }

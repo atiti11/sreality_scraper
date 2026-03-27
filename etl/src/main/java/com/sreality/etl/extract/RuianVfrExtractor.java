@@ -24,17 +24,25 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 /**
- * Downloads and parses the ČÚZK RUIAN full state VFR XML file.
- *
- * File: ST_UZSZ — full state, complete copy, simplified boundaries.
- * URL:  https://services.cuzk.gov.cz/vfr/YYYYMM/YYYYMMDD_ST_UZSZ.xml.zip
- * Size: ~4.7 MB compressed. Contains the complete hierarchy:
- *   Vusc → Okres → Obec → CastObce → Zsj (with polygons)
- *
- * Parser design: depth-aware for entity/collection detection,
- * but FK wrapper detection is depth-independent (just tracks element name)
- * to avoid off-by-one depth bugs.
- */
+* Downloads and parses the ČÚZK RUIAN full state VFR XML file.
+*
+* File: ST_UKSG — full state, complete dataset with generalized boundaries.
+* URL:  https://services.cuzk.gov.cz/vfr/YYYYMM/YYYYMMDD_ST_UKSG.xml.zip
+* Size: ~15 MB compressed.
+*
+* ST_UKSG contains ALL 6258 municipalities (obec) with their full hierarchy.
+* The previously used ST_UZSZ (basic/Z dataset) only contains ~393 unique
+* obec (the ORP-level municipalities) — insufficient for this ETL.
+*
+* ST_UKSG also contains ZSJ polygons (generalized boundaries), enabling
+* the spatial join that matches estate GPS coords to cast_obce.
+*
+* Parser design:
+* - Detect collections by local name membership in COLLECTION_NAMES set.
+* - Detect entities at collectionDepth+1 (depth-independent).
+* - Use element NAME (not depth) for FK wrapper and field detection.
+* - Single-pass StAX, no DOM, no buffering.
+*/
 public class RuianVfrExtractor {
 
     private static final Logger log = LoggerFactory.getLogger(RuianVfrExtractor.class);
@@ -42,6 +50,11 @@ public class RuianVfrExtractor {
     private static final String BASE_URL = "https://services.cuzk.gov.cz/vfr/";
     private static final double SIMPLIFY_TOLERANCE = 0.0005;
     private static final GeometryFactory GF = new GeometryFactory(new PrecisionModel(), 4326);
+
+    /** All known VFR collection element names. */
+    private static final Set<String> COLLECTION_NAMES = Set.of(
+        "Vusc", "Okresy", "Obce", "CastiObci", "Zsj"
+    );
 
     private final EtlConfig config;
 
@@ -68,9 +81,9 @@ public class RuianVfrExtractor {
             LocalDate end = ym.atEndOfMonth();
             String url = BASE_URL
                 + String.format("%04d%02d", ym.getYear(), ym.getMonthValue()) + "/"
-                + end.format(DateTimeFormatter.BASIC_ISO_DATE) + "_ST_UZSZ.xml.zip";
+                + end.format(DateTimeFormatter.BASIC_ISO_DATE) + "_ST_UKSG.xml.zip";
 
-            log.info("Trying RUIAN VFR (ST_UZSZ): {}", url);
+            log.info("Trying RUIAN VFR (ST_UKSG): {}", url);
 
             byte[] zipBytes;
             try (CloseableHttpClient http = buildHttpClient()) {
@@ -115,11 +128,9 @@ public class RuianVfrExtractor {
     /**
      * Single-pass StAX parser.
      *
-     * Strategy:
-     * - Use depth to detect collection wrappers (depth=3) and entity records (depth=4).
-     * - Use element NAME (not depth) to detect FK wrappers and Kod/Nazev/Hranice fields.
-     *   This avoids off-by-one depth errors when parsing nested structures.
-     * - Track a small state machine: entityType → inFkElement → inKod/inNazev/inPosList
+     * Collections are detected by name membership in COLLECTION_NAMES (depth-independent).
+     * Entities are detected at exactly collectionDepth+1.
+     * FK wrappers and field elements (Kod, Nazev, Hranice) are detected by name only.
      */
     private VfrResult parseXml(InputStream xmlStream, LocalDate snapshotDate) throws Exception {
         List<DimKraj>     krajList     = new ArrayList<>();
@@ -133,19 +144,20 @@ public class RuianVfrExtractor {
         factory.setProperty(XMLInputFactory.SUPPORT_DTD, false);
         XMLStreamReader reader = factory.createXMLStreamReader(xmlStream);
 
-        int     depth        = 0;
-        int     entityDepth  = -1;   // depth at which current entity started
-        String  collection   = null; // collection wrapper name (set at depth=3)
-        String  entityType   = null; // current record type (set at depth=4)
-        int     currentKod   = 0;
-        String  currentNazev = null;
-        int     fkKod        = 0;
-        String  currentPosList = null;
-        boolean inHranice    = false;
-        boolean inFkElement  = false;
-        boolean inKod        = false;
-        boolean inNazev      = false;
-        boolean inPosList    = false;
+        int     depth           = 0;
+        String  collection      = null; // current collection name
+        int     collectionDepth = -1;   // absolute depth of collection start element
+        String  entityType      = null; // entity being parsed
+        int     entityDepth     = -1;   // absolute depth of entity start element
+        int     currentKod      = 0;
+        String  currentNazev    = null;
+        int     fkKod           = 0;
+        String  currentPosList  = null;
+        boolean inHranice       = false;
+        boolean inFkElement     = false;
+        boolean inKod           = false;
+        boolean inNazev         = false;
+        boolean inPosList       = false;
         StringBuilder posListBuf = new StringBuilder();
 
         while (reader.hasNext()) {
@@ -155,38 +167,33 @@ public class RuianVfrExtractor {
                 depth++;
                 String local = reader.getLocalName();
 
-                // ── Collection wrapper at depth=3 ─────────────────────────────
-                if (depth == 3) {
-                    collection = local;
+                if (entityType != null) {
+                    // ── Inside an entity: detect FK wrappers and fields ────────
+                    if (!inHranice && !inFkElement && isFkWrapper(entityType, local)) {
+                        inFkElement = true;
+                    } else if ("Hranice".equals(local) && !inFkElement) {
+                        inHranice = true;
+                    } else if ("posList".equals(local) && inHranice) {
+                        inPosList = true;
+                        posListBuf.setLength(0);
+                    } else if ("Kod".equals(local)) {
+                        inKod = true;
+                    } else if ("Nazev".equals(local) && !inFkElement && !inHranice) {
+                        inNazev = true;
+                    }
 
-                // ── Entity record starts one level below collection ────────────
-                } else if (entityType == null && collection != null
-                           && depth == 4 && isRecordInCollection(collection, local)) {
+                } else if (collection != null && depth == collectionDepth + 1
+                           && isRecordInCollection(collection, local)) {
+                    // ── Entity starts one level below its collection ───────────
                     entityType  = local;
                     entityDepth = depth;
                     currentKod = 0; currentNazev = null; fkKod = 0;
                     currentPosList = null; inFkElement = false; inHranice = false;
 
-                // ── Inside an entity record ────────────────────────────────────
-                } else if (entityType != null) {
-
-                    if (!inHranice && !inFkElement && isFkWrapper(entityType, local)) {
-                        // FK wrapper element (e.g. <oki:Vusc> inside Okres)
-                        inFkElement = true;
-
-                    } else if ("Hranice".equals(local) && !inFkElement) {
-                        inHranice = true;
-
-                    } else if ("posList".equals(local) && inHranice) {
-                        inPosList = true;
-                        posListBuf.setLength(0);
-
-                    } else if ("Kod".equals(local)) {
-                        inKod = true;
-
-                    } else if ("Nazev".equals(local) && !inFkElement && !inHranice) {
-                        inNazev = true;
-                    }
+                } else if (collection == null && COLLECTION_NAMES.contains(local)) {
+                    // ── Collection starts (depth-independent detection) ────────
+                    collection      = local;
+                    collectionDepth = depth;
                 }
 
             } else if (event == XMLStreamReader.CHARACTERS) {
@@ -214,14 +221,15 @@ public class RuianVfrExtractor {
                     } else if (inFkElement && isFkWrapper(entityType, local)) {
                         inFkElement = false;
                     } else if (depth == entityDepth && local.equals(entityType)) {
-                        // End of entity record — emit
                         emitRecord(entityType, currentKod, currentNazev, fkKod, currentPosList,
                             krajList, okresList, obecList, castObceList, zsjList);
                         entityType  = null;
                         entityDepth = -1;
                     }
-                } else if (depth == 3) {
-                    collection = null;
+                } else if (collection != null && depth == collectionDepth
+                           && local.equals(collection)) {
+                    collection      = null;
+                    collectionDepth = -1;
                 }
 
                 depth--;
@@ -242,10 +250,20 @@ public class RuianVfrExtractor {
         };
     }
 
+    /**
+     * Returns true when the given child element name is the FK wrapper for that entity type.
+     *
+     * The VFR FK wrapper local names, verified against the 2026-02 ST_UZSZ snapshot:
+     *   Okres    → <oki:Vusc>         local="Vusc"
+     *   Obec     → <obi:Okres>        local="Okres"
+     *              <obi:SpravniObvod> local="SpravniObvod" (Praha and military districts)
+     *   CastObce → <coi:Obec>         local="Obec"
+     *   Zsj      → <zsi:CastObce>     local="CastObce"
+     */
     private static boolean isFkWrapper(String entityType, String child) {
         return switch (entityType) {
             case "Okres"    -> "Vusc".equals(child);
-            case "Obec"     -> "Okres".equals(child);
+            case "Obec"     -> "Okres".equals(child) || "SpravniObvod".equals(child);
             case "CastObce" -> "Obec".equals(child);
             case "Zsj"      -> "CastObce".equals(child);
             default -> false;

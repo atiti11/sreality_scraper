@@ -12,12 +12,11 @@ import java.util.List;
  *   15 = Okres     → no geom,  fields: kod (int), nazev, vusc (int FK)
  *   17 = VUSC/Kraj → no geom,  fields: kod (int), nazev
  *
- * CSU demographics URL:
- *   The URL changes every year when CSU migrates their file hosting.
- *   CsuExtractor treats it as optional — on failure it logs a warning and
- *   continues with empty demographics. dim_obec rows are still created,
- *   just with null population/area/age fields.
- *   Set CSU_DEMOGRAPHICS_URL in .env when a working URL is available.
+ * CSU demographics:
+ *   Source: CSU MOS open data CSV (opendata.csu.gov.cz/soubory/od/od_mos01/)
+ *   CsuExtractor tries 2025 then 2024 automatically.
+ *   Set CSU_DEMOGRAPHICS_URL in .env only as an emergency override if CSU
+ *   changes their URL structure and the built-in URLs stop working.
  *
  * Do NOT add resultRecordCount, resultOffset, or f= to RUIAN base URLs —
  * RuianExtractor.fetchInPages() appends those during pagination.
@@ -48,8 +47,11 @@ public class EtlConfig {
     public final String ruianOkresUrl;
     public final String ruianKrajUrl;
 
-    // ── CSU demographics CSV (optional — empty string = skip) ─────────────────
-    public final String csuDemographicsUrl;
+    // ── CSU demographics (optional override) ─────────────────────────────────
+    public final String csuDemographicsUrl;   // emergency override URL
+
+    // ── MPSV unemployment (optional — okres level) ────────────────────────────
+    public final String mpsvUnemploymentUrl;
 
     // ── Processing ────────────────────────────────────────────────────────────
     public final int batchSize;
@@ -63,6 +65,7 @@ public class EtlConfig {
             String ruianCastObceUrl, String ruianObecUrl,
             String ruianOkresUrl, String ruianKrajUrl,
             String csuDemographicsUrl,
+            String mpsvUnemploymentUrl,
             int batchSize, int httpTimeoutMs) {
         this.mongoHost          = mongoHost;
         this.mongoPort          = mongoPort;
@@ -80,6 +83,7 @@ public class EtlConfig {
         this.ruianOkresUrl      = ruianOkresUrl;
         this.ruianKrajUrl       = ruianKrajUrl;
         this.csuDemographicsUrl = csuDemographicsUrl;
+        this.mpsvUnemploymentUrl = mpsvUnemploymentUrl;
         this.batchSize          = batchSize;
         this.httpTimeoutMs      = httpTimeoutMs;
     }
@@ -108,9 +112,10 @@ public class EtlConfig {
             env("RUIAN_KRAJ_URL",
                 RUIAN_BASE + "/17/query?where=1%3D1&outFields=kod,nazev&returnGeometry=false"),
 
-            // Empty string = let CsuExtractor try its built-in fallback URLs.
-            // Set CSU_DEMOGRAPHICS_URL in .env when you have a working CSV URL.
+            // Emergency override — leave blank to use built-in MOS URLs
             env("CSU_DEMOGRAPHICS_URL", ""),
+            // Empty string = MpsvExtractor uses its built-in MPSV endpoint
+            env("MPSV_UNEMPLOYMENT_URL", ""),
 
             Integer.parseInt(env("ETL_BATCH_SIZE",      "500")),
             Integer.parseInt(env("ETL_HTTP_TIMEOUT_MS", "60000"))
