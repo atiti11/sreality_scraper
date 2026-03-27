@@ -15,20 +15,17 @@ import java.util.List;
  * Loads transformed data into the PostgreSQL data warehouse.
  *
  * Connection pool: HikariCP with max 2 connections (1 active + 1 idle).
- * This is a single-threaded loader — no concurrency needed.
- *
  * All writes use INSERT ... ON CONFLICT (upsert) for idempotency.
- * Re-running the ETL is always safe.
  *
- * SCD Type 2 on fact tables:
- *   When an estate changes, the current row's valid_to is set to today
- *   and a new row is inserted with valid_from = today, valid_to = NULL.
- *   The comparison key is hash_id; fields compared are price, is_active,
- *   and boolean features.
+ * SCD Type 2 on fact tables — new row on price or is_active change.
+ * SCD Type 1 on dimension tables — latest data always wins.
  *
- * SCD Type 1 on dimension tables:
- *   Dimension rows are upserted by natural key (kod_obce, kod_cast_obce etc.).
- *   The latest data always wins — no history is kept.
+ * FK resolution for the location hierarchy:
+ *   upsertOkres   uses DimOkres.kodVusc   → subquery on dim_kraj.kod_kraje
+ *   upsertObec    uses DimObec.kodOkresu  → subquery on dim_okres.kod_okresu
+ *   upsertCastObce uses DimCastObce.kodObce → subquery on dim_obec.kod_obce
+ * These FK codes come directly from the RUIAN API and are NOT stored in PG —
+ * only the resolved surrogate IDs are stored.
  */
 public class PostgresLoader implements AutoCloseable {
 
@@ -55,10 +52,6 @@ public class PostgresLoader implements AutoCloseable {
 
     // ── Schema creation ───────────────────────────────────────────────────────
 
-    /**
-     * Creates the data warehouse schema and all tables if they don't exist.
-     * Safe to call on every ETL run — uses CREATE IF NOT EXISTS throughout.
-     */
     public void ensureSchema() {
         log.info("Ensuring schema '{}' and all tables exist...", schema);
         try (Connection conn = ds.getConnection();
@@ -66,7 +59,6 @@ public class PostgresLoader implements AutoCloseable {
 
             stmt.execute("CREATE SCHEMA IF NOT EXISTS " + schema);
 
-            // ── Location hierarchy ────────────────────────────────────────
             stmt.execute("""
                 CREATE TABLE IF NOT EXISTS %s.dim_kraj (
                     id           SERIAL PRIMARY KEY,
@@ -103,7 +95,6 @@ public class PostgresLoader implements AutoCloseable {
                     obec_id           INT NOT NULL REFERENCES %s.dim_obec(id)
                 )""".formatted(schema, schema));
 
-            // ── Shared dimensions ─────────────────────────────────────────
             stmt.execute("""
                 CREATE TABLE IF NOT EXISTS %s.dim_agency (
                     id           SERIAL PRIMARY KEY,
@@ -125,15 +116,11 @@ public class PostgresLoader implements AutoCloseable {
                     is_weekend   BOOLEAN     NOT NULL
                 )""".formatted(schema));
 
-            // ── Fact tables ───────────────────────────────────────────────
             for (String dealType : List.of("sale", "rent", "auction")) {
                 createFactTable(stmt, dealType);
             }
 
-            // ── Closing views ─────────────────────────────────────────────
             createClosingViews(stmt);
-
-            // ── Indexes ───────────────────────────────────────────────────
             createIndexes(stmt);
 
             log.info("Schema ready.");
@@ -143,7 +130,7 @@ public class PostgresLoader implements AutoCloseable {
     }
 
     private void createFactTable(Statement stmt, String dealType) throws SQLException {
-        String priceCol = switch (dealType) {
+        String priceColsDdl = switch (dealType) {
             case "sale"    -> "price_asked_czk         BIGINT,\n    price_asked_per_m2        NUMERIC(12,2),";
             case "rent"    -> "price_monthly_czk        BIGINT,\n    price_monthly_per_m2      NUMERIC(10,2),";
             case "auction" -> "price_starting_bid_czk   BIGINT,";
@@ -189,20 +176,15 @@ public class PostgresLoader implements AutoCloseable {
                 advert_images_count      INT,
                 has_floor_plan           BOOLEAN,
                 has_video                BOOLEAN
-            )""".formatted(schema, dealType, schema, schema, schema, schema, priceCol));
+            )""".formatted(schema, dealType, schema, schema, schema, schema, priceColsDdl));
     }
 
     private void createClosingViews(Statement stmt) throws SQLException {
-        // Sale closing view
         stmt.execute("DROP VIEW IF EXISTS %s.v_sale_closing".formatted(schema));
         stmt.execute("""
             CREATE VIEW %s.v_sale_closing AS
             SELECT
-                s.hash_id,
-                s.property_type,
-                s.sub_category,
-                s.obec_id,
-                s.cast_obce_id,
+                s.hash_id, s.property_type, s.sub_category, s.obec_id, s.cast_obce_id,
                 MIN(s.valid_from)                                        AS listed_date,
                 MAX(s.valid_from)                                        AS closed_date,
                 MAX(s.valid_from) - MIN(s.valid_from)                    AS days_on_market,
@@ -214,9 +196,6 @@ public class PostgresLoader implements AutoCloseable {
                     PARTITION BY s.hash_id ORDER BY s.valid_from ASC
                     ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
                 )                                                         AS final_asking_price_czk,
-                CASE WHEN MAX(s.usable_area_m2) > 0
-                    THEN MAX(s.price_asked_czk)::numeric / MAX(s.usable_area_m2)
-                    ELSE NULL END                                         AS final_asking_price_per_m2,
                 COUNT(DISTINCT s.price_asked_czk) - 1                    AS total_price_changes,
                 CASE WHEN FIRST_VALUE(s.price_asked_czk) OVER (
                         PARTITION BY s.hash_id ORDER BY s.valid_from
@@ -237,16 +216,11 @@ public class PostgresLoader implements AutoCloseable {
                      s.price_asked_czk, s.usable_area_m2, s.valid_from
             """.formatted(schema, schema, schema));
 
-        // Rent closing view
         stmt.execute("DROP VIEW IF EXISTS %s.v_rent_closing".formatted(schema));
         stmt.execute("""
             CREATE VIEW %s.v_rent_closing AS
             SELECT
-                s.hash_id,
-                s.property_type,
-                s.sub_category,
-                s.obec_id,
-                s.cast_obce_id,
+                s.hash_id, s.property_type, s.sub_category, s.obec_id, s.cast_obce_id,
                 MIN(s.valid_from)                                        AS listed_date,
                 MAX(s.valid_from)                                        AS closed_date,
                 MAX(s.valid_from) - MIN(s.valid_from)                    AS days_on_market,
@@ -278,15 +252,11 @@ public class PostgresLoader implements AutoCloseable {
                      s.price_monthly_czk, s.valid_from
             """.formatted(schema, schema, schema));
 
-        // Auction closing view
         stmt.execute("DROP VIEW IF EXISTS %s.v_auction_closing".formatted(schema));
         stmt.execute("""
             CREATE VIEW %s.v_auction_closing AS
             SELECT
-                s.hash_id,
-                s.property_type,
-                s.obec_id,
-                s.cast_obce_id,
+                s.hash_id, s.property_type, s.obec_id, s.cast_obce_id,
                 MIN(s.valid_from)                       AS listed_date,
                 MAX(s.valid_from)                       AS closed_date,
                 MAX(s.valid_from) - MIN(s.valid_from)   AS days_on_market,
@@ -314,9 +284,7 @@ public class PostgresLoader implements AutoCloseable {
             "CREATE INDEX IF NOT EXISTS idx_fact_auc_hash     ON %s.fact_auction_snapshot (hash_id)",
             "CREATE INDEX IF NOT EXISTS idx_fact_auc_valid    ON %s.fact_auction_snapshot (valid_to) WHERE valid_to IS NULL",
         };
-        for (String s : ddl) {
-            stmt.execute(s.formatted(schema));
-        }
+        for (String s : ddl) stmt.execute(s.formatted(schema));
     }
 
     // ── Dimension upserts (SCD Type 1) ────────────────────────────────────────
@@ -327,7 +295,6 @@ public class PostgresLoader implements AutoCloseable {
             VALUES (?, ?)
             ON CONFLICT (kod_kraje) DO UPDATE
               SET nazev_kraje = EXCLUDED.nazev_kraje
-            RETURNING id
             """.formatted(schema);
         try (Connection conn = ds.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -354,8 +321,7 @@ public class PostgresLoader implements AutoCloseable {
             for (DimOkres o : rows) {
                 ps.setString(1, o.kodOkresu());
                 ps.setString(2, o.nazevOkresu());
-                // kraj code embedded in okres code: first 5 chars is NUTS-based — use subquery
-                ps.setString(3, o.kodOkresu().length() >= 5 ? o.kodOkresu().substring(0, 5) : o.kodOkresu());
+                ps.setString(3, o.kodVusc()); // real RUIAN FK → dim_kraj.kod_kraje
                 ps.execute();
             }
         } catch (SQLException e) {
@@ -385,7 +351,7 @@ public class PostgresLoader implements AutoCloseable {
             for (DimObec o : rows) {
                 ps.setString(1, o.kodObce());
                 ps.setString(2, o.nazevObce());
-                ps.setString(3, o.kodObce().length() >= 6 ? o.kodObce().substring(0, 6) : o.kodObce());
+                ps.setString(3, o.kodOkresu()); // real RUIAN FK → dim_okres.kod_okresu
                 setNullableInt(ps, 4, o.population());
                 setNullableDouble(ps, 5, o.populationDensity());
                 setNullableDouble(ps, 6, o.areaKm2());
@@ -412,11 +378,7 @@ public class PostgresLoader implements AutoCloseable {
             for (DimCastObce c : rows) {
                 ps.setString(1, c.kodCastObce());
                 ps.setString(2, c.nazevCastObce());
-                // obec code: cast_obce code first 6 digits = obec code (RUIAN convention)
-                String obceFallback = c.kodCastObce().length() >= 6
-                    ? c.kodCastObce().substring(0, 6)
-                    : c.kodCastObce();
-                ps.setString(3, obceFallback);
+                ps.setString(3, c.kodObce()); // real RUIAN FK → dim_obec.kod_obce
                 ps.execute();
             }
         } catch (SQLException e) {
@@ -450,7 +412,6 @@ public class PostgresLoader implements AutoCloseable {
         }
     }
 
-    /** Upserts an agency by sreality_id. Returns the surrogate id. */
     public int upsertAgency(DimAgency agency) {
         String sql = """
             INSERT INTO %s.dim_agency (sreality_id, name, url)
@@ -474,38 +435,13 @@ public class PostgresLoader implements AutoCloseable {
 
     // ── Fact upserts (SCD Type 2) ─────────────────────────────────────────────
 
-    /**
-     * Upserts a batch of fact snapshots with SCD Type 2 logic.
-     *
-     * For each estate:
-     *   - If no current row exists (valid_to IS NULL) → INSERT as new
-     *   - If current row exists AND meaningful fields changed:
-     *       UPDATE current row valid_to = today
-     *       INSERT new row valid_from = today, valid_to = NULL
-     *   - If current row exists AND nothing changed → skip (unchanged)
-     *
-     * Uses a single connection for the whole batch — no per-row commit overhead.
-     */
     public void upsertFactSnapshots(List<FactSnapshot> snapshots, String dealType, EtlReport report) {
-        String priceCol = switch (dealType) {
-            case "sale"    -> "price_asked_czk, price_asked_per_m2,";
-            case "rent"    -> "price_monthly_czk, price_monthly_per_m2,";
-            case "auction" -> "price_starting_bid_czk,";
-            default -> throw new IllegalArgumentException("Unknown deal type: " + dealType);
-        };
-
-        String table = schema + ".fact_" + dealType + "_snapshot";
-
-        // Check query: find current row for a hash_id
+        String table    = schema + ".fact_" + dealType + "_snapshot";
         String checkSql = "SELECT id, " + priceColumnName(dealType) +
             ", is_active FROM " + table +
             " WHERE hash_id = ? AND valid_to IS NULL LIMIT 1";
-
-        // Close current row
         String closeSql = "UPDATE " + table +
             " SET valid_to = ? WHERE hash_id = ? AND valid_to IS NULL";
-
-        // Insert new row
         String insertSql = buildInsertSql(table, dealType);
 
         try (Connection conn = ds.getConnection()) {
@@ -514,35 +450,26 @@ public class PostgresLoader implements AutoCloseable {
                 PreparedStatement checkPs  = conn.prepareStatement(checkSql);
                 PreparedStatement closePs  = conn.prepareStatement(closeSql);
                 PreparedStatement insertPs = conn.prepareStatement(insertSql);
-
                 LocalDate today = LocalDate.now();
 
                 for (FactSnapshot s : snapshots) {
                     checkPs.setLong(1, s.hashId());
                     ResultSet rs = checkPs.executeQuery();
-
                     boolean hasCurrentRow = rs.next();
 
                     if (!hasCurrentRow) {
-                        // Brand new estate
                         bindInsert(insertPs, s, today, null, dealType);
                         insertPs.execute();
                         report.estatesInserted.incrementAndGet();
-
                     } else {
-                        long   existingPrice    = rs.getLong(2);
-                        boolean existingActive  = rs.getBoolean(3);
-
-                        boolean changed = existingPrice != coercePrice(s, dealType)
+                        long    existingPrice  = rs.getLong(2);
+                        boolean existingActive = rs.getBoolean(3);
+                        boolean changed = existingPrice != coercePrice(s)
                             || existingActive != s.isActive();
-
                         if (changed) {
-                            // Close existing row
                             closePs.setDate(1, Date.valueOf(today));
                             closePs.setLong(2, s.hashId());
                             closePs.execute();
-
-                            // Insert new version
                             bindInsert(insertPs, s, today, null, dealType);
                             insertPs.execute();
                             report.estatesUpdated.incrementAndGet();
@@ -552,7 +479,6 @@ public class PostgresLoader implements AutoCloseable {
                     }
                     rs.close();
                 }
-
                 conn.commit();
             } catch (Exception e) {
                 conn.rollback();
@@ -563,7 +489,6 @@ public class PostgresLoader implements AutoCloseable {
         }
     }
 
-    /** No-op for views — they are live queries, nothing to refresh. */
     public void refreshClosingViews() {
         log.info("Closing views are live SQL views — no refresh needed.");
     }
@@ -579,22 +504,20 @@ public class PostgresLoader implements AutoCloseable {
         };
     }
 
-    private long coercePrice(FactSnapshot s, String dealType) {
-        if (s.priceCzk() == null) return 0;
-        return s.priceCzk();
+    private long coercePrice(FactSnapshot s) {
+        return s.priceCzk() != null ? s.priceCzk() : 0L;
     }
 
     private String buildInsertSql(String table, String dealType) {
-        String priceParams = switch (dealType) {
-            case "sale"    -> "?, ?,";   // price_asked_czk, price_asked_per_m2
-            case "rent"    -> "?, ?,";   // price_monthly_czk, price_monthly_per_m2
-            case "auction" -> "?,";      // price_starting_bid_czk only
-            default -> throw new IllegalArgumentException(dealType);
-        };
         String priceColsInsert = switch (dealType) {
             case "sale"    -> "price_asked_czk, price_asked_per_m2,";
             case "rent"    -> "price_monthly_czk, price_monthly_per_m2,";
             case "auction" -> "price_starting_bid_czk,";
+            default -> throw new IllegalArgumentException(dealType);
+        };
+        String priceParams = switch (dealType) {
+            case "sale", "rent" -> "?, ?,";
+            case "auction"      -> "?,";
             default -> throw new IllegalArgumentException(dealType);
         };
         return """
@@ -627,7 +550,6 @@ public class PostgresLoader implements AutoCloseable {
         ps.setInt(i++,    s.obecId());
         setNullableInt(ps, i++, s.agencyId());
         ps.setInt(i++,    s.dateId());
-        // price — one or two columns depending on deal type
         if (s.priceCzk() != null) ps.setLong(i++, s.priceCzk());
         else                       ps.setNull(i++, Types.BIGINT);
         if (!dealType.equals("auction")) {

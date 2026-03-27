@@ -169,6 +169,22 @@ All URLs are configurable via environment variables. Defaults point to the live 
 
 ## Key Design Decisions
 
+### Scraper: MAX_ESTATES is a per-category limit
+`MAX_ESTATES` limits the number of estates scraped **per collection** (per category ×
+deal-type combination), not globally across the whole run. This ensures a representative
+sample from every collection — apartments_sale, apartments_rent, houses_sale, etc. —
+rather than filling only the first collection and stopping.
+
+Example: `MAX_ESTATES=20` → at most 20 estates from each of the 15 collections
+= at most 300 total estates per run.
+
+Set `MAX_ESTATES=0` (or leave unset) for a full unlimited scrape.
+
+When `MAX_ESTATES` is active, the `markInactiveNotSeenSince` step is **skipped** for
+each category — we only scraped a partial window of the listing so we cannot reliably
+determine which estates have genuinely disappeared vs. simply fell outside the sample.
+Inactive marking only runs on full (unlimited) scrapes.
+
 ### Scraper: change detection
 Each estate has a `_content_hash` field: `MD5(hash_id | price_czk.value_raw | name | labelsReleased)`.
 If the hash matches the stored value and `last_update_corrupted=false`, the estate is skipped.
@@ -219,7 +235,7 @@ other_sale / rent / auction
 | `MONGO_PASSWORD` | `changeme` | MongoDB password |
 | `SREALITY_BASE_URL` | `https://...` | Sreality API base URL |
 | `PER_PAGE` | `100` | Estates per listing page |
-| `MAX_ESTATES` | `0` | Dev limiter (0 = unlimited) |
+| `MAX_ESTATES` | `0` | Per-category dev limiter: max N estates per collection (0 = unlimited) |
 | `HTTP_CONNECT_TIMEOUT_MS` | `10000` | Connect timeout |
 | `HTTP_READ_TIMEOUT_MS` | `30000` | Read timeout |
 | `REQUEST_DELAY_MS` | `500` | Delay between requests |
@@ -255,8 +271,11 @@ cp .env.example .env
 # Start persistent services
 docker compose up -d mongodb postgres
 
-# Run scraper once
+# Run scraper once (full scrape)
 docker compose run --rm scraper
+
+# Run scraper with per-category limit (good for local testing)
+MAX_ESTATES=20 docker compose run --rm scraper
 
 # Run ETL once (requires MongoDB to have estate data)
 docker compose run --rm etl
@@ -286,6 +305,7 @@ docker compose logs -f scraper
 - **Do not** use `Map.of()` with more than 10 entries — use `Map.ofEntries()`.
 - **Do not** load entire MongoDB collections into memory in the ETL — always stream via `MongoExtractor.streamCollection()`.
 - **Do not** store JTS geometry objects in PostgreSQL — they are in-memory only in `DimCastObce` for spatial joins. Only the surrogate keys are stored in PG.
+- **Do not** treat `MAX_ESTATES` as a global limit — it is intentionally per-category. Do not revert this to a global counter.
 
 ---
 

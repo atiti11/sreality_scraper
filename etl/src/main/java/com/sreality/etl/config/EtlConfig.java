@@ -4,11 +4,28 @@ import java.util.List;
 
 /**
  * All environment variables consumed by the ETL process.
- * Defaults are safe for local docker-compose development.
  *
- * Copy .env.example to .env and set real values before running.
+ * RUIAN base URLs point to the official ČÚZK ArcGIS MapServer at ags.cuzk.gov.cz.
+ * Layer IDs and field names verified from live API:
+ *   11 = CastObce  → POINTS,   fields: kod (int), nazev, obec (int FK)
+ *   12 = Obec      → POLYGONS, fields: kod (int), nazev, okres (int FK)
+ *   15 = Okres     → no geom,  fields: kod (int), nazev, vusc (int FK)
+ *   17 = VUSC/Kraj → no geom,  fields: kod (int), nazev
+ *
+ * CSU demographics URL:
+ *   The URL changes every year when CSU migrates their file hosting.
+ *   CsuExtractor treats it as optional — on failure it logs a warning and
+ *   continues with empty demographics. dim_obec rows are still created,
+ *   just with null population/area/age fields.
+ *   Set CSU_DEMOGRAPHICS_URL in .env when a working URL is available.
+ *
+ * Do NOT add resultRecordCount, resultOffset, or f= to RUIAN base URLs —
+ * RuianExtractor.fetchInPages() appends those during pagination.
  */
 public class EtlConfig {
+
+    private static final String RUIAN_BASE =
+        "https://ags.cuzk.gov.cz/arcgis/rest/services/RUIAN/Prohlizeci_sluzba_nad_daty_RUIAN/MapServer";
 
     // ── MongoDB (source) ──────────────────────────────────────────────────────
     public final String mongoHost;
@@ -25,21 +42,17 @@ public class EtlConfig {
     public final String pgPassword;
     public final String pgSchema;
 
-    // ── RUIAN WFS endpoint ────────────────────────────────────────────────────
-    // Default: Czech RUIAN open data GeoJSON via geodata.gov.cz
+    // ── RUIAN endpoints (base URLs only, no pagination params) ────────────────
     public final String ruianCastObceUrl;
     public final String ruianObecUrl;
     public final String ruianOkresUrl;
     public final String ruianKrajUrl;
 
-    // ── CSU demographics CSV URL ──────────────────────────────────────────────
+    // ── CSU demographics CSV (optional — empty string = skip) ─────────────────
     public final String csuDemographicsUrl;
 
     // ── Processing ────────────────────────────────────────────────────────────
-    // Batch size for streaming MongoDB → PostgreSQL (keeps heap flat)
     public final int batchSize;
-
-    // HTTP download timeout (ms)
     public final int httpTimeoutMs;
 
     private EtlConfig(
@@ -86,37 +99,27 @@ public class EtlConfig {
             env("PG_PASSWORD", "changeme"),
             env("PG_SCHEMA",   "dw"),
 
-            // RUIAN GeoJSON via ArcGIS FeatureServer — returns all features with geometry
             env("RUIAN_CAST_OBCE_URL",
-                "https://services6.arcgis.com/NMfBpFl1DRNR3yBa/arcgis/rest/services/RUIAN_CAST_OBCE_P/FeatureServer/0/query?where=1%3D1&outFields=*&f=geojson&resultRecordCount=10000"),
+                RUIAN_BASE + "/11/query?where=1%3D1&outFields=kod,nazev,obec&returnGeometry=false&outSR=4326"),
             env("RUIAN_OBEC_URL",
-                "https://services6.arcgis.com/NMfBpFl1DRNR3yBa/arcgis/rest/services/RUIAN_OBEC_P/FeatureServer/0/query?where=1%3D1&outFields=*&f=geojson&resultRecordCount=10000"),
+                RUIAN_BASE + "/12/query?where=1%3D1&outFields=kod,nazev,okres&returnGeometry=true&outSR=4326"),
             env("RUIAN_OKRES_URL",
-                "https://services6.arcgis.com/NMfBpFl1DRNR3yBa/arcgis/rest/services/RUIAN_OKRES_P/FeatureServer/0/query?where=1%3D1&outFields=*&f=geojson&resultRecordCount=1000"),
+                RUIAN_BASE + "/15/query?where=1%3D1&outFields=kod,nazev,vusc&returnGeometry=false"),
             env("RUIAN_KRAJ_URL",
-                "https://services6.arcgis.com/NMfBpFl1DRNR3yBa/arcgis/rest/services/RUIAN_KRAJ_P/FeatureServer/0/query?where=1%3D1&outFields=*&f=geojson&resultRecordCount=100"),
+                RUIAN_BASE + "/17/query?where=1%3D1&outFields=kod,nazev&returnGeometry=false"),
 
-            // CSU: population by municipality (yearly updated Excel/CSV)
-            env("CSU_DEMOGRAPHICS_URL",
-                "https://www.czso.cz/documents/10180/25233174/1300721903.csv"),
+            // Empty string = let CsuExtractor try its built-in fallback URLs.
+            // Set CSU_DEMOGRAPHICS_URL in .env when you have a working CSV URL.
+            env("CSU_DEMOGRAPHICS_URL", ""),
 
-            Integer.parseInt(env("ETL_BATCH_SIZE",    "500")),
+            Integer.parseInt(env("ETL_BATCH_SIZE",      "500")),
             Integer.parseInt(env("ETL_HTTP_TIMEOUT_MS", "60000"))
         );
     }
 
-    /**
-     * Returns all MongoDB collection names that contain estates for the
-     * given deal type. The scraper stores one collection per property×deal
-     * combination (apartments_sale, houses_sale, ...) so we collect them all.
-     */
     public List<String> mongoCollectionsFor(String dealType) {
-        List<String> propertyTypes = List.of(
-            "apartments", "houses", "land", "commercial", "other"
-        );
-        return propertyTypes.stream()
-            .map(pt -> pt + "_" + dealType)
-            .toList();
+        return List.of("apartments", "houses", "land", "commercial", "other")
+            .stream().map(pt -> pt + "_" + dealType).toList();
     }
 
     public String mongoUri() {

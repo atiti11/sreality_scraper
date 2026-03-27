@@ -1,23 +1,17 @@
 # docker-compose.prod.yml
 # Apply on top of docker-compose.yml on the VPS:
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-#
-# Only overrides production-specific settings — resource limits, pinned
-# image versions, and logging config. All service definitions live in
-# docker-compose.yml.
 
 services:
 
   mongodb:
-    image: mongo:7.0.12   # pinned patch version for reproducibility
+    image: mongo:7.0.12
     deploy:
       resources:
         limits:
           memory: 512m
 
   scraper:
-    # Uncomment to pull a pre-built image from a registry instead of building:
-    # image: ghcr.io/youruser/sreality-scraper:latest
     deploy:
       resources:
         reservations:
@@ -32,7 +26,7 @@ services:
         max-file: "5"
 
   postgres:
-    image: postgres:16.3   # pinned patch version
+    image: postgres:16.3
     deploy:
       resources:
         limits:
@@ -49,7 +43,7 @@ services:
         reservations:
           memory: 64m
         limits:
-          memory: 256m   # matches -Xmx256m in etl/Dockerfile ENTRYPOINT
+          memory: 512m   # raised from 256m — RUIAN polygon geometry requires more headroom
           pids: 50
     logging:
       driver: "json-file"

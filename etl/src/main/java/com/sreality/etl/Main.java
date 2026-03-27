@@ -19,25 +19,17 @@ import com.sreality.etl.transform.SpatialJoiner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * ETL entry point.
- *
- * Stateless — runs once and exits. Designed to be triggered by cron or
- * docker restart policy. Safe to run repeatedly; uses upsert semantics
- * throughout so re-runs are idempotent.
+ * ETL entry point — stateless, runs once and exits.
  *
  * Pipeline:
- *   1. Extract   — MongoDB estates, RUIAN GeoJSON, CSU demographics CSV
- *   2. Transform — spatial join, deduplication, derived attributes, surrogate keys
- *   3. Load      — upsert into PostgreSQL data warehouse
- *
- * Memory budget: ~256 MB heap (-Xmx256m). Data is streamed or processed
- * in small batches. Reference data (RUIAN polygons, demographics) is loaded
- * fully into memory since it is small (~50 MB total). Estate data is
- * processed in batches of 500 to avoid large in-memory lists.
+ *   1. Extract   — MongoDB estates + RUIAN + CSU demographics
+ *   2. Transform — dimension building (with synthetic rows for Praha etc.)
+ *   3. Load      — upsert into PostgreSQL (idempotent)
  */
 public class Main {
 
@@ -50,64 +42,76 @@ public class Main {
         EtlReport report = new EtlReport();
 
         try (
-            MongoExtractor    mongo  = new MongoExtractor(config);
-            PostgresLoader    pg     = new PostgresLoader(config)
+            MongoExtractor mongo = new MongoExtractor(config);
+            PostgresLoader pg    = new PostgresLoader(config)
         ) {
             // ── Step 1: Extract reference data ───────────────────────────────
             log.info("=== EXTRACT ===");
 
-            log.info("Downloading RUIAN cast_obce boundaries...");
             RuianExtractor ruian = new RuianExtractor(config);
-            List<DimCastObce> castObceList = ruian.extractCastObce();
-            List<DimObec>     obecList     = ruian.extractObec();
-            List<DimOkres>    okresList    = ruian.extractOkres();
-            List<DimKraj>     krajList     = ruian.extractKraj();
+
+            log.info("Downloading RUIAN cast_obce (layer 11)...");
+            List<DimCastObce> castObceRaw = ruian.extractCastObce();
+
+            log.info("Downloading RUIAN obec (layer 12)...");
+            List<DimObec> obecRaw = ruian.extractObec();
+
+            log.info("Downloading RUIAN okres (layer 15)...");
+            List<DimOkres> okresRaw = ruian.extractOkres();
+
+            log.info("Downloading RUIAN kraj (layer 17)...");
+            List<DimKraj> krajRaw = ruian.extractKraj();
+
             log.info("RUIAN: {} cast_obce, {} obec, {} okres, {} kraj",
-                castObceList.size(), obecList.size(), okresList.size(), krajList.size());
+                castObceRaw.size(), obecRaw.size(), okresRaw.size(), krajRaw.size());
 
-            log.info("Downloading CSU demographic data...");
-            CsuExtractor csu = new CsuExtractor(config);
-            Map<String, CsuExtractor.Demographics> demographics = csu.extract();
-            log.info("CSU: {} municipality demographic records", demographics.size());
+            log.info("Downloading CSU demographics...");
+            Map<String, CsuExtractor.Demographics> demographics =
+                new CsuExtractor(config).extract();
+            log.info("CSU: {} municipality records", demographics.size());
 
-            // ── Step 2: Build and load dimension tables ───────────────────────
-            log.info("=== TRANSFORM + LOAD DIMENSIONS ===");
+            // ── Step 2: Build dimensions ──────────────────────────────────────
+            // buildOkres receives the raw obec list so it can synthesize okres
+            // rows for statutory cities (Praha etc.) that have okres=null in RUIAN.
+            // buildKraj also synthesizes Praha kraj if absent from layer 17.
+            log.info("=== TRANSFORM DIMENSIONS ===");
+
+            DimensionBuilder dim = new DimensionBuilder();
+
+            List<DimKraj>     krajRows     = dim.buildKraj(krajRaw);
+            List<DimOkres>    okresRows    = dim.buildOkres(okresRaw, obecRaw);
+            List<DimObec>     obecRows     = dim.buildObec(obecRaw, demographics);
+            List<DimCastObce> castObceRows = dim.buildCastObce(castObceRaw);
+
+            // ── Step 3: Load dimensions ───────────────────────────────────────
+            log.info("=== LOAD DIMENSIONS ===");
 
             pg.ensureSchema();
 
-            DimensionBuilder dimBuilder = new DimensionBuilder(demographics);
-
-            // Location hierarchy — load bottom-up so FKs resolve
-            List<DimKraj>     krajRows   = dimBuilder.buildKraj(krajList);
-            List<DimOkres>    okresRows  = dimBuilder.buildOkres(okresList, krajRows);
-            List<DimObec>     obecRows   = dimBuilder.buildObec(obecList, okresRows, demographics);
-            List<DimCastObce> castRows   = dimBuilder.buildCastObce(castObceList, obecRows);
-
+            // Load in FK order: kraj → okres → obec → cast_obce
             pg.upsertKraj(krajRows);
             pg.upsertOkres(okresRows);
             pg.upsertObec(obecRows);
-            pg.upsertCastObce(castRows);
+            pg.upsertCastObce(castObceRows);
 
-            // Build spatial index for point-in-polygon matching
-            SpatialJoiner spatialJoiner = new SpatialJoiner(castRows, obecRows);
+            // Build spatial index after dimensions are loaded
+            SpatialJoiner spatialJoiner = new SpatialJoiner(castObceRows, obecRows);
 
-            // Agency and date dimensions are built incrementally during fact loading
-            Map<Integer, DimAgency> agencyCache = new java.util.HashMap<>();
+            // Date dimension — pre-populate 2024–2030
             DimDate.ensureRange(pg, 2024, 2030);
 
-            // ── Step 3: Stream estates → transform → load ────────────────────
-            log.info("=== TRANSFORM + LOAD FACTS ===");
+            // ── Step 4: Stream estates → transform → load facts ──────────────
+            log.info("=== LOAD FACTS ===");
 
+            Map<Integer, DimAgency> agencyCache = new HashMap<>();
             FactBuilder factBuilder = new FactBuilder(spatialJoiner, agencyCache, pg, config);
 
-            // Process each deal type from its MongoDB collection(s)
-            // Each collection is streamed in batches — no full list in memory
             for (String dealType : List.of("sale", "rent", "auction")) {
                 List<String> collections = config.mongoCollectionsFor(dealType);
-                log.info("Processing deal type '{}' from {} collections", dealType, collections.size());
+                log.info("Processing deal type '{}' ({} collections)", dealType, collections.size());
 
                 for (String collection : collections) {
-                    log.info("  Streaming collection '{}'...", collection);
+                    log.info("  Streaming '{}'...", collection);
                     mongo.streamCollection(collection, batch -> {
                         List<RawEstate> estates = batch.stream()
                             .map(RawEstate::fromDocument)
@@ -118,8 +122,7 @@ public class Main {
                 }
             }
 
-            // ── Step 4: Refresh closing views ────────────────────────────────
-            log.info("=== REFRESH VIEWS ===");
+            // ── Step 5: Closing views (live SQL — nothing to refresh) ─────────
             pg.refreshClosingViews();
 
             report.finish();

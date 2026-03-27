@@ -30,6 +30,13 @@ import java.util.function.Consumer;
  *
  * All category × deal-type combinations are scraped:
  *   apartments, houses, land, commercial, other  ×  sale, rent, auction
+ *
+ * MAX_ESTATES limiter:
+ *   When MAX_ESTATES > 0, at most MAX_ESTATES estates are processed
+ *   PER CATEGORY (i.e. per collection). This makes the limiter useful for
+ *   local testing — you get a representative sample from every collection
+ *   rather than only filling the first one.
+ *   Set MAX_ESTATES=0 (or leave unset) for a full unlimited scrape.
  */
 public class EstateScraper {
 
@@ -81,27 +88,22 @@ public class EstateScraper {
         log.info("=== Scrape run started ===");
         log.info("Config: {}", config);
 
-        ScrapeRunReport report = new ScrapeRunReport();
-        boolean hitMaxEstates  = false;
+        if (config.hasMaxEstatesLimit()) {
+            log.info("MAX_ESTATES={} — scraping at most {} estates per category.",
+                config.maxEstates, config.maxEstates);
+        }
 
-        outer:
+        ScrapeRunReport report = new ScrapeRunReport();
+
         for (int categoryMainCb : categoryMainCbs) {
             for (int categoryTypeCb : categoryTypeCbs) {
-
                 scrapeCategory(categoryMainCb, categoryTypeCb, report);
-
-                if (config.hasMaxEstatesLimit() && report.totalProcessed >= config.maxEstates) {
-                    log.info("MAX_ESTATES={} reached — stopping early.", config.maxEstates);
-                    hitMaxEstates = true;
-                    break outer;
-                }
             }
         }
 
-        report.finish(hitMaxEstates);
+        report.finish(false);
         printSummary(report);
 
-        // Persist the run report to MongoDB
         try {
             mongo.saveReport(report);
         } catch (Exception e) {
@@ -146,11 +148,12 @@ public class EstateScraper {
             return;
         }
 
-        // How many estates can we still process given the global MAX_ESTATES budget?
-        int remaining    = config.hasMaxEstatesLimit()
-            ? config.maxEstates - report.totalProcessed
-            : Integer.MAX_VALUE;
-        int effectiveMax = Math.min(totalCount, remaining);
+        // MAX_ESTATES is now a per-category limit.
+        // If set, process at most MAX_ESTATES estates from this collection.
+        // If not set, process everything.
+        int effectiveMax = config.hasMaxEstatesLimit()
+            ? Math.min(totalCount, config.maxEstates)
+            : totalCount;
         int totalPages   = (int) Math.ceil((double) effectiveMax / config.perPage);
 
         log.info("Total in category: {}, will process: {}, pages: {} (perPage={})",
@@ -163,8 +166,6 @@ public class EstateScraper {
         for (int page = 1; page <= totalPages; page++) {
             if (categoryProcessed[0] >= effectiveMax) break;
 
-            // Process each estate immediately and discard — do not hold the full
-            // page list in memory while processing individual estates.
             final int effectiveMaxFinal = effectiveMax;
             fetchAndProcessListingPage(
                 categoryMainCb, categoryTypeCb, page, collectionName, report,
@@ -176,16 +177,14 @@ public class EstateScraper {
                 }
             );
 
-            log.info("Page {}/{} done — processed: {}, upserted: {}, skipped: {}, " +
+            log.info("Page {}/{} done — category processed: {}/{}, total upserted: {}, skipped: {}, " +
                      "half-success: {}, gone: {}",
                 page, totalPages,
-                report.totalProcessed, report.totalUpserted, report.totalSkipped,
+                categoryProcessed[0], effectiveMax,
+                report.totalUpserted, report.totalSkipped,
                 report.totalHalfSuccess, report.totalGone);
 
-            // Hint to the GC to collect after each page — keeps memory footprint flat
-            // over long multi-hour runs processing tens of thousands of estates.
             System.gc();
-
             sleep();
         }
 
@@ -193,13 +192,20 @@ public class EstateScraper {
             propertyLabel, dealLabel, categoryProcessed[0], report.totalProcessed);
 
         // Mark estates not seen in this run as inactive.
-        // Any active estate whose _last_seen_at is older than the run start
-        // did not appear in any listing page — it has been sold or removed.
-        long markedInactive = mongo.markInactiveNotSeenSince(collectionName, report.startedAt);
-        report.totalMarkedInactive += markedInactive;
-        if (markedInactive > 0) {
-            log.info("Marked {} estates as inactive in {} (not seen since run started)",
-                markedInactive, collectionName);
+        // NOTE: when MAX_ESTATES is active we deliberately skip this step —
+        // we only scraped a partial page of the category so we cannot reliably
+        // determine which estates have genuinely disappeared vs. which were
+        // simply outside our sample window.
+        if (!config.hasMaxEstatesLimit()) {
+            long markedInactive = mongo.markInactiveNotSeenSince(collectionName, report.startedAt);
+            report.totalMarkedInactive += markedInactive;
+            if (markedInactive > 0) {
+                log.info("Marked {} estates as inactive in {} (not seen since run started)",
+                    markedInactive, collectionName);
+            }
+        } else {
+            log.debug("MAX_ESTATES active — skipping inactive marking for {} (partial scrape)",
+                collectionName);
         }
     }
 
@@ -214,35 +220,23 @@ public class EstateScraper {
             return;
         }
 
-        // Compute content hash from listing fields only.
-        // Uses EstateDocumentBuilder.computeContentHash() to guarantee the hash
-        // is identical to what gets stored in the document by build().
         String contentHash = EstateDocumentBuilder.computeContentHash(estateNode);
 
-        // Skip if nothing changed and the document is complete.
-        // If the document exists but last_update_corrupted=true, isUnchanged()
-        // returns false even when the hash matches, forcing a repair attempt.
         if (mongo.isUnchanged(collectionName, hashId, contentHash)) {
             report.totalSkipped++;
             log.debug("Skipping estate {} — content hash unchanged and document complete", hashId);
-            // Still update _last_seen_at so we can detect estates that disappear from listings
             mongo.touchLastSeen(collectionName, hashId);
             return;
         }
 
-        // Check whether this estate already exists in DB (before detail fetch)
-        // so we can correctly classify a detail failure as update vs. new insert,
-        // and to detect the corruption-repair case for logging.
         boolean wasExisting = mongo.exists(collectionName, hashId);
         if (wasExisting && mongo.isCorrupted(collectionName, hashId)) {
             log.info("Repairing corrupted estate {} in {} — re-fetching detail", hashId, collectionName);
             report.totalRepaired++;
         }
 
-        // Fetch detail
         DetailResult detail = fetchDetail(hashId, collectionName, wasExisting, report);
 
-        // Build and upsert combined document (detailNode may be null)
         Document doc = EstateDocumentBuilder.build(estateNode, detail.node);
         mongo.upsert(collectionName, doc);
         report.totalUpserted++;
@@ -261,11 +255,6 @@ public class EstateScraper {
         return response.path("result_size").asInt(0);
     }
 
-    /**
-     * Fetches one listing page and immediately passes each estate to the consumer.
-     * This avoids holding the full page (100 JsonNode objects) in memory
-     * while processing individual estates one by one.
-     */
     private void fetchAndProcessListingPage(int categoryMainCb, int categoryTypeCb,
                                              int page, String collectionName,
                                              ScrapeRunReport report,
@@ -284,30 +273,14 @@ public class EstateScraper {
                     estateConsumer.accept(estate);
                 }
             }
-            // response and estates go out of scope here and are immediately GC-eligible
         } catch (IOException e) {
             log.error("Failed to fetch listing page {}: {}", url, e.getMessage());
             report.totalListingErrors++;
         }
     }
 
-    /**
-     * Holds the result of a detail fetch attempt.
-     * node is null if the fetch failed; the failure is already recorded in the report.
-     */
     private record DetailResult(JsonNode node) {}
 
-    /**
-     * Fetch the detail for a single estate.
-     * Always returns a DetailResult — node is null if fetch failed.
-     *
-     * Failures are recorded in the ScrapeRunReport as incomplete estates.
-     *
-     * Note: sreality returns 410 Gone when an estate appears in the search index
-     * but has already been sold/withdrawn by the time the detail is fetched.
-     * The response body is always {"logged_in": false} regardless — this is
-     * sreality's generic minimal 410 response and has nothing to do with auth.
-     */
     private DetailResult fetchDetail(long hashId, String collectionName,
                                      boolean wasExisting, ScrapeRunReport report) {
         String url = config.srealityBaseUrl + "/" + hashId;
