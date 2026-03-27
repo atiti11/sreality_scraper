@@ -1,9 +1,4 @@
-# docker-compose.prod.yml
-# Apply on top of docker-compose.yml on the VPS:
-#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-
 services:
-
   mongodb:
     image: mongo:7.0.12
     deploy:
@@ -43,7 +38,7 @@ services:
         reservations:
           memory: 64m
         limits:
-          memory: 512m   # raised from 256m — RUIAN polygon geometry requires more headroom
+          memory: 640m   # raised — ZSJ index (~45k polygons) needs more heap
           pids: 50
     logging:
       driver: "json-file"

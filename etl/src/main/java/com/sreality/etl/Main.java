@@ -4,21 +4,17 @@ import com.sreality.etl.config.EtlConfig;
 import com.sreality.etl.extract.CsuExtractor;
 import com.sreality.etl.extract.MongoExtractor;
 import com.sreality.etl.extract.RuianExtractor;
+import com.sreality.etl.extract.RuianVfrExtractor;
+import com.sreality.etl.extract.RuianVfrExtractor.VfrResult;
 import com.sreality.etl.load.PostgresLoader;
-import com.sreality.etl.model.DimAgency;
-import com.sreality.etl.model.DimCastObce;
-import com.sreality.etl.model.DimDate;
-import com.sreality.etl.model.DimKraj;
-import com.sreality.etl.model.DimObec;
-import com.sreality.etl.model.DimOkres;
-import com.sreality.etl.model.EtlReport;
-import com.sreality.etl.model.RawEstate;
+import com.sreality.etl.model.*;
 import com.sreality.etl.transform.DimensionBuilder;
 import com.sreality.etl.transform.FactBuilder;
 import com.sreality.etl.transform.SpatialJoiner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,10 +22,21 @@ import java.util.Map;
 /**
  * ETL entry point — stateless, runs once and exits.
  *
- * Pipeline:
- *   1. Extract   — MongoDB estates + RUIAN + CSU demographics
- *   2. Transform — dimension building (with synthetic rows for Praha etc.)
- *   3. Load      — upsert into PostgreSQL (idempotent)
+ * RUIAN data strategy:
+ *   PRIMARY:  VFR XML (ST_UKSH monthly snapshot from services.cuzk.gov.cz).
+ *             Contains the complete hierarchy kraj→okres→obec→cast_obce→ZSJ
+ *             with polygon geometry. One file, one source of truth.
+ *             Updated monthly by ČÚZK. All dimensions are rebuilt from this.
+ *
+ *   FALLBACK: ArcGIS REST API (ags.cuzk.gov.cz MapServer layers 11/12/15/17).
+ *             Used only when the VFR download fails. Provides hierarchy data
+ *             but no ZSJ polygons so cast_obce matching is unavailable.
+ *
+ * Snapshot logic:
+ *   - VFR snapshot date (from ZIP filename) stored in dw.ruian_snapshot.
+ *   - If newer than stored: reload ALL dimensions + bulk re-match all facts.
+ *   - If same: skip dimension reload and bulk re-match (run is faster).
+ *   - Either way: process new/changed MongoDB estates.
  */
 public class Main {
 
@@ -41,75 +48,100 @@ public class Main {
 
         EtlReport report = new EtlReport();
 
-        try (
-            MongoExtractor mongo = new MongoExtractor(config);
-            PostgresLoader pg    = new PostgresLoader(config)
-        ) {
-            // ── Step 1: Extract reference data ───────────────────────────────
-            log.info("=== EXTRACT ===");
+        try (MongoExtractor mongo = new MongoExtractor(config);
+             PostgresLoader pg    = new PostgresLoader(config)) {
 
-            RuianExtractor ruian = new RuianExtractor(config);
+            pg.ensureSchema();
 
-            log.info("Downloading RUIAN cast_obce (layer 11)...");
-            List<DimCastObce> castObceRaw = ruian.extractCastObce();
+            // ── Step 1: Download RUIAN VFR (primary source) ───────────────────
+            log.info("=== EXTRACT RUIAN VFR (primary source) ===");
+            VfrResult vfr = new RuianVfrExtractor(config).extract();
 
-            log.info("Downloading RUIAN obec (layer 12)...");
-            List<DimObec> obecRaw = ruian.extractObec();
+            LocalDate vfrDate     = vfr != null ? vfr.snapshotDate() : null;
+            LocalDate lastVfrDate = pg.getLastRuianSnapshotDate();
+            boolean   isNewer     = vfrDate != null
+                && (lastVfrDate == null || vfrDate.isAfter(lastVfrDate));
 
-            log.info("Downloading RUIAN okres (layer 15)...");
-            List<DimOkres> okresRaw = ruian.extractOkres();
+            log.info("VFR: downloaded={}, snapshot={}, lastStored={}, isNewer={}",
+                vfr != null, vfrDate, lastVfrDate, isNewer);
 
-            log.info("Downloading RUIAN kraj (layer 17)...");
-            List<DimKraj> krajRaw = ruian.extractKraj();
+            // ── Step 2: Extract dimension data ────────────────────────────────
+            // VFR success → use its parsed hierarchy directly (no ArcGIS calls).
+            // VFR failure → fall back to ArcGIS API for hierarchy only
+            //               (ZSJ/cast_obce spatial join will be unavailable).
+            List<DimKraj>     krajRaw;
+            List<DimOkres>    okresRaw;
+            List<DimObec>     obecRaw;
+            List<DimCastObce> castObceRaw;
+            List<RuianVfrExtractor.ZsjRecord> zsjRecords;
 
-            log.info("RUIAN: {} cast_obce, {} obec, {} okres, {} kraj",
-                castObceRaw.size(), obecRaw.size(), okresRaw.size(), krajRaw.size());
+            if (vfr != null) {
+                log.info("Using VFR as dimension source ({} kraj, {} okres, {} obec, {} cast_obce, {} ZSJ)",
+                    vfr.kraj().size(), vfr.okres().size(),
+                    vfr.obec().size(), vfr.castObce().size(), vfr.zsj().size());
+                krajRaw     = vfr.kraj();
+                okresRaw    = vfr.okres();
+                obecRaw     = vfr.obec();
+                castObceRaw = vfr.castObce();
+                zsjRecords  = vfr.zsj();
+            } else {
+                log.warn("VFR unavailable — falling back to ArcGIS REST API (no ZSJ spatial join)");
+                RuianExtractor api = new RuianExtractor(config);
+                krajRaw     = api.extractKraj();
+                okresRaw    = api.extractOkres();
+                obecRaw     = api.extractObec();
+                castObceRaw = api.extractCastObce();
+                zsjRecords  = List.of(); // no ZSJ without VFR
+            }
 
-            log.info("Downloading CSU demographics...");
+            // ── Step 3: CSU demographics ──────────────────────────────────────
+            log.info("=== EXTRACT CSU ===");
             Map<String, CsuExtractor.Demographics> demographics =
                 new CsuExtractor(config).extract();
-            log.info("CSU: {} municipality records", demographics.size());
 
-            // ── Step 2: Build dimensions ──────────────────────────────────────
-            // buildOkres receives the raw obec list so it can synthesize okres
-            // rows for statutory cities (Praha etc.) that have okres=null in RUIAN.
-            // buildKraj also synthesizes Praha kraj if absent from layer 17.
+            // ── Step 4: Build dimensions ──────────────────────────────────────
             log.info("=== TRANSFORM DIMENSIONS ===");
-
             DimensionBuilder dim = new DimensionBuilder();
-
             List<DimKraj>     krajRows     = dim.buildKraj(krajRaw);
             List<DimOkres>    okresRows    = dim.buildOkres(okresRaw, obecRaw);
             List<DimObec>     obecRows     = dim.buildObec(obecRaw, demographics);
             List<DimCastObce> castObceRows = dim.buildCastObce(castObceRaw);
 
-            // ── Step 3: Load dimensions ───────────────────────────────────────
+            // ── Step 5: Load dimensions (always — keeps dims fresh) ───────────
             log.info("=== LOAD DIMENSIONS ===");
-
-            pg.ensureSchema();
-
-            // Load in FK order: kraj → okres → obec → cast_obce
             pg.upsertKraj(krajRows);
             pg.upsertOkres(okresRows);
             pg.upsertObec(obecRows);
             pg.upsertCastObce(castObceRows);
-
-            // Build spatial index after dimensions are loaded
-            SpatialJoiner spatialJoiner = new SpatialJoiner(castObceRows, obecRows);
-
-            // Date dimension — pre-populate 2024–2030
             DimDate.ensureRange(pg, 2024, 2030);
 
-            // ── Step 4: Stream estates → transform → load facts ──────────────
-            log.info("=== LOAD FACTS ===");
+            // ── Step 6: Build spatial index ───────────────────────────────────
+            log.info("=== BUILD SPATIAL INDEX ===");
+            SpatialJoiner spatialJoiner = new SpatialJoiner(
+                castObceRows, obecRows, zsjRecords.isEmpty() ? null : zsjRecords);
 
+            // ── Step 7: Bulk re-match if RUIAN snapshot is newer ─────────────
+            if (isNewer) {
+                log.info("=== BULK SPATIAL RE-MATCH (snapshot: {} → {}) ===",
+                    lastVfrDate, vfrDate);
+                pg.bulkRematchSpatial(spatialJoiner);
+                pg.saveRuianSnapshotDate(vfrDate, vfr.zsj().size());
+                log.info("Re-match complete.");
+            } else {
+                log.info("RUIAN snapshot unchanged ({}) — skipping bulk re-match.", lastVfrDate);
+                if (lastVfrDate == null && vfrDate != null) {
+                    pg.saveRuianSnapshotDate(vfrDate, vfr.zsj().size());
+                }
+            }
+
+            // ── Step 8: Process estates from MongoDB ──────────────────────────
+            log.info("=== LOAD FACTS ===");
             Map<Integer, DimAgency> agencyCache = new HashMap<>();
             FactBuilder factBuilder = new FactBuilder(spatialJoiner, agencyCache, pg, config);
 
             for (String dealType : List.of("sale", "rent", "auction")) {
                 List<String> collections = config.mongoCollectionsFor(dealType);
-                log.info("Processing deal type '{}' ({} collections)", dealType, collections.size());
-
+                log.info("Processing '{}' ({} collections)", dealType, collections.size());
                 for (String collection : collections) {
                     log.info("  Streaming '{}'...", collection);
                     mongo.streamCollection(collection, batch -> {
@@ -122,9 +154,7 @@ public class Main {
                 }
             }
 
-            // ── Step 5: Closing views (live SQL — nothing to refresh) ─────────
             pg.refreshClosingViews();
-
             report.finish();
             log.info("=== ETL COMPLETE ===");
             log.info("{}", report.summary());
