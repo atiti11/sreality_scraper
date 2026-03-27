@@ -22,7 +22,7 @@ public class AppConfig {
     // Development / testing limiter  (0 = no limit → scrape everything)
     public final int    maxEstates;
 
-    // Delay between HTTP requests in ms (default 500 — polite but not too slow)
+    // Delay between HTTP requests in ms (default 300 — average with ±50% jitter = 150–450ms)
     public final long   requestDelayMs;
 
     // HTTP client timeouts (ms)
@@ -84,7 +84,7 @@ public class AppConfig {
             Integer.parseInt(env("HTTP_READ_TIMEOUT_MS",    "30000")),
             env("TELEGRAM_BOT_TOKEN", ""),
             env("TELEGRAM_CHAT_ID",   ""),
-            Long.parseLong(env("REQUEST_DELAY_MS", "500"))
+            Long.parseLong(env("REQUEST_DELAY_MS", "300"))
         );
     }
 

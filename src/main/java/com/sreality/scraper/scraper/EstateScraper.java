@@ -342,10 +342,19 @@ public class EstateScraper {
         }
     }
 
+    private static final java.util.Random JITTER = new java.util.Random();
+
+    /**
+     * Sleeps for requestDelayMs ± 50% jitter.
+     * e.g. with requestDelayMs=300: sleeps between 150ms and 450ms,
+     * averaging 300ms. Jitter prevents thundering-herd patterns and
+     * makes the scraper look less like a bot to rate limiters.
+     */
     private void sleep() {
         if (requestDelayMs <= 0) return;
         try {
-            Thread.sleep(requestDelayMs);
+            long jitter = (long) (requestDelayMs * 0.5 * (JITTER.nextDouble() * 2 - 1));
+            Thread.sleep(requestDelayMs + jitter);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
