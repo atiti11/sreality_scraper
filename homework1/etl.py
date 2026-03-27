@@ -80,57 +80,47 @@ def dst_conn():
 SCHEMA      = os.getenv("DST_SCHEMA", os.getenv("DST_USER", "public"))
 FACT_LIMIT  = int(os.getenv("FACT_LIMIT", "1000"))
 SRC_SCHEMA  = "dw"
+# Table prefix — avoids collisions with other students in the shared public schema
+PREFIX      = os.getenv("DST_USER", "stud") + "_"
 
 # ── Schema DDL ────────────────────────────────────────────────────────────────
 
 DDL = """
--- Dimension: kraj (NUTS2 cohesion region)
-CREATE TABLE IF NOT EXISTS {s}.dim_kraj (
+CREATE TABLE IF NOT EXISTS {s}.{p}dim_kraj (
     id          SERIAL PRIMARY KEY,
     kod_kraje   VARCHAR(20)  NOT NULL UNIQUE,
     nazev_kraje VARCHAR(100) NOT NULL
 );
-
--- Dimension: okres (district), child of kraj
-CREATE TABLE IF NOT EXISTS {s}.dim_okres (
+CREATE TABLE IF NOT EXISTS {s}.{p}dim_okres (
     id           SERIAL PRIMARY KEY,
     kod_okresu   VARCHAR(20)  NOT NULL UNIQUE,
     nazev_okresu VARCHAR(100) NOT NULL,
-    kraj_id      INT NOT NULL REFERENCES {s}.dim_kraj(id)
+    kraj_id      INT NOT NULL REFERENCES {s}.{p}dim_kraj(id)
 );
-
--- Dimension: obec (municipality), child of okres
--- Enriched with CSU MOS demographic data (population)
-CREATE TABLE IF NOT EXISTS {s}.dim_obec (
+CREATE TABLE IF NOT EXISTS {s}.{p}dim_obec (
     id                 SERIAL PRIMARY KEY,
     kod_obce           VARCHAR(20)  NOT NULL UNIQUE,
     nazev_obce         VARCHAR(100) NOT NULL,
-    okres_id           INT NOT NULL REFERENCES {s}.dim_okres(id),
+    okres_id           INT NOT NULL REFERENCES {s}.{p}dim_okres(id),
     population         INT,
     population_density NUMERIC(10,2),
     area_km2           NUMERIC(10,2),
     avg_age            NUMERIC(5,2),
     unemployment_pct   NUMERIC(5,2)
 );
-
--- Dimension: cast_obce (part of municipality), child of obec
-CREATE TABLE IF NOT EXISTS {s}.dim_cast_obce (
+CREATE TABLE IF NOT EXISTS {s}.{p}dim_cast_obce (
     id              SERIAL PRIMARY KEY,
     kod_cast_obce   VARCHAR(20)  NOT NULL UNIQUE,
     nazev_cast_obce VARCHAR(100) NOT NULL,
-    obec_id         INT NOT NULL REFERENCES {s}.dim_obec(id)
+    obec_id         INT NOT NULL REFERENCES {s}.{p}dim_obec(id)
 );
-
--- Dimension: real estate agency
-CREATE TABLE IF NOT EXISTS {s}.dim_agency (
+CREATE TABLE IF NOT EXISTS {s}.{p}dim_agency (
     id          SERIAL PRIMARY KEY,
     sreality_id INT         NOT NULL UNIQUE,
     name        VARCHAR(200),
     url         VARCHAR(500)
 );
-
--- Dimension: date (calendar)
-CREATE TABLE IF NOT EXISTS {s}.dim_date (
+CREATE TABLE IF NOT EXISTS {s}.{p}dim_date (
     date_id     INT PRIMARY KEY,
     full_date   DATE    NOT NULL,
     year        INT     NOT NULL,
@@ -141,9 +131,7 @@ CREATE TABLE IF NOT EXISTS {s}.dim_date (
     day_of_week INT     NOT NULL,
     is_weekend  BOOLEAN NOT NULL
 );
-
--- Fact: property sale listings (SCD Type 2 snapshots)
-CREATE TABLE IF NOT EXISTS {s}.fact_sale_snapshot (
+CREATE TABLE IF NOT EXISTS {s}.{p}fact_sale_snapshot (
     id                       BIGSERIAL PRIMARY KEY,
     hash_id                  BIGINT       NOT NULL,
     sreality_url             VARCHAR(200),
@@ -151,10 +139,10 @@ CREATE TABLE IF NOT EXISTS {s}.fact_sale_snapshot (
     sub_category             VARCHAR(100),
     valid_from               DATE         NOT NULL,
     valid_to                 DATE,
-    cast_obce_id             INT REFERENCES {s}.dim_cast_obce(id),
-    obec_id                  INT NOT NULL REFERENCES {s}.dim_obec(id),
-    agency_id                INT REFERENCES {s}.dim_agency(id),
-    date_id                  INT REFERENCES {s}.dim_date(date_id),
+    cast_obce_id             INT REFERENCES {s}.{p}dim_cast_obce(id),
+    obec_id                  INT NOT NULL REFERENCES {s}.{p}dim_obec(id),
+    agency_id                INT REFERENCES {s}.{p}dim_agency(id),
+    date_id                  INT REFERENCES {s}.{p}dim_date(date_id),
     price_asked_czk          BIGINT,
     price_asked_per_m2       NUMERIC(12,2),
     usable_area_m2           NUMERIC(10,2),
@@ -183,9 +171,7 @@ CREATE TABLE IF NOT EXISTS {s}.fact_sale_snapshot (
     has_floor_plan           BOOLEAN,
     has_video                BOOLEAN
 );
-
--- Fact: property rent listings (SCD Type 2 snapshots)
-CREATE TABLE IF NOT EXISTS {s}.fact_rent_snapshot (
+CREATE TABLE IF NOT EXISTS {s}.{p}fact_rent_snapshot (
     id                       BIGSERIAL PRIMARY KEY,
     hash_id                  BIGINT       NOT NULL,
     sreality_url             VARCHAR(200),
@@ -193,10 +179,10 @@ CREATE TABLE IF NOT EXISTS {s}.fact_rent_snapshot (
     sub_category             VARCHAR(100),
     valid_from               DATE         NOT NULL,
     valid_to                 DATE,
-    cast_obce_id             INT REFERENCES {s}.dim_cast_obce(id),
-    obec_id                  INT NOT NULL REFERENCES {s}.dim_obec(id),
-    agency_id                INT REFERENCES {s}.dim_agency(id),
-    date_id                  INT REFERENCES {s}.dim_date(date_id),
+    cast_obce_id             INT REFERENCES {s}.{p}dim_cast_obce(id),
+    obec_id                  INT NOT NULL REFERENCES {s}.{p}dim_obec(id),
+    agency_id                INT REFERENCES {s}.{p}dim_agency(id),
+    date_id                  INT REFERENCES {s}.{p}dim_date(date_id),
     price_monthly_czk        BIGINT,
     price_monthly_per_m2     NUMERIC(10,2),
     usable_area_m2           NUMERIC(10,2),
@@ -225,9 +211,7 @@ CREATE TABLE IF NOT EXISTS {s}.fact_rent_snapshot (
     has_floor_plan           BOOLEAN,
     has_video                BOOLEAN
 );
-
--- Fact: property auction listings (SCD Type 2 snapshots)
-CREATE TABLE IF NOT EXISTS {s}.fact_auction_snapshot (
+CREATE TABLE IF NOT EXISTS {s}.{p}fact_auction_snapshot (
     id                       BIGSERIAL PRIMARY KEY,
     hash_id                  BIGINT       NOT NULL,
     sreality_url             VARCHAR(200),
@@ -235,10 +219,10 @@ CREATE TABLE IF NOT EXISTS {s}.fact_auction_snapshot (
     sub_category             VARCHAR(100),
     valid_from               DATE         NOT NULL,
     valid_to                 DATE,
-    cast_obce_id             INT REFERENCES {s}.dim_cast_obce(id),
-    obec_id                  INT NOT NULL REFERENCES {s}.dim_obec(id),
-    agency_id                INT REFERENCES {s}.dim_agency(id),
-    date_id                  INT REFERENCES {s}.dim_date(date_id),
+    cast_obce_id             INT REFERENCES {s}.{p}dim_cast_obce(id),
+    obec_id                  INT NOT NULL REFERENCES {s}.{p}dim_obec(id),
+    agency_id                INT REFERENCES {s}.{p}dim_agency(id),
+    date_id                  INT REFERENCES {s}.{p}dim_date(date_id),
     price_starting_bid_czk   BIGINT,
     usable_area_m2           NUMERIC(10,2),
     floor_number             INT,
@@ -447,20 +431,22 @@ def remap_fks(data: dict) -> dict:
 # ── Load ──────────────────────────────────────────────────────────────────────
 
 def create_schema(dst_cur):
-    log.info("Creating tables in schema '%s'...", SCHEMA)
+    log.info("Creating tables in schema '%s' with prefix '%s'...", SCHEMA, PREFIX)
     # Schema is pre-created by the university server admin — do not CREATE SCHEMA
-    dst_cur.execute(DDL.replace("{s}", SCHEMA))
+    dst_cur.execute(DDL.replace("{s}", SCHEMA).replace("{p}", PREFIX))
     log.info("Schema ready.")
 
 
 def load(dst_cur, data: dict):
     log.info("Loading dimensions and facts into '%s'...", SCHEMA)
 
+    T = lambda name: f"{SCHEMA}.{PREFIX}{name}"  # fully qualified prefixed table name
+
     # ── dim_kraj ──────────────────────────────────────────────────────────────
     kraj_rows = [{"id": r["id"], "kod_kraje": r["kod_kraje"], "nazev_kraje": r["nazev_kraje"]}
                  for r in data["kraj"]]
-    upsert_rows(dst_cur, f"{SCHEMA}.dim_kraj", kraj_rows, "kod_kraje")
-    kraj_map = build_id_map(dst_cur, f"{SCHEMA}.dim_kraj", "kod_kraje", data["kraj"])
+    upsert_rows(dst_cur, T("dim_kraj"), kraj_rows, "kod_kraje")
+    kraj_map = build_id_map(dst_cur, T("dim_kraj"), "kod_kraje", data["kraj"])
     log.info("  dim_kraj: %d rows", len(kraj_rows))
 
     # ── dim_okres ─────────────────────────────────────────────────────────────
@@ -469,8 +455,8 @@ def load(dst_cur, data: dict):
          "kraj_id": kraj_map[r["kraj_id"]]}
         for r in data["okres"] if r["kraj_id"] in kraj_map
     ]
-    upsert_rows(dst_cur, f"{SCHEMA}.dim_okres", okres_rows, "kod_okresu")
-    okres_map = build_id_map(dst_cur, f"{SCHEMA}.dim_okres", "kod_okresu", data["okres"])
+    upsert_rows(dst_cur, T("dim_okres"), okres_rows, "kod_okresu")
+    okres_map = build_id_map(dst_cur, T("dim_okres"), "kod_okresu", data["okres"])
     log.info("  dim_okres: %d rows", len(okres_rows))
 
     # ── dim_obec ──────────────────────────────────────────────────────────────
@@ -482,8 +468,8 @@ def load(dst_cur, data: dict):
          "unemployment_pct": r["unemployment_pct"]}
         for r in data["obec"] if r["okres_id"] in okres_map
     ]
-    upsert_rows(dst_cur, f"{SCHEMA}.dim_obec", obec_rows, "kod_obce")
-    obec_map = build_id_map(dst_cur, f"{SCHEMA}.dim_obec", "kod_obce", data["obec"])
+    upsert_rows(dst_cur, T("dim_obec"), obec_rows, "kod_obce")
+    obec_map = build_id_map(dst_cur, T("dim_obec"), "kod_obce", data["obec"])
     log.info("  dim_obec: %d rows", len(obec_rows))
 
     # ── dim_cast_obce ─────────────────────────────────────────────────────────
@@ -492,8 +478,8 @@ def load(dst_cur, data: dict):
          "obec_id": obec_map[r["obec_id"]]}
         for r in data["cast"] if r["obec_id"] in obec_map
     ]
-    upsert_rows(dst_cur, f"{SCHEMA}.dim_cast_obce", cast_rows, "kod_cast_obce")
-    cast_map = build_id_map(dst_cur, f"{SCHEMA}.dim_cast_obce", "kod_cast_obce", data["cast"])
+    upsert_rows(dst_cur, T("dim_cast_obce"), cast_rows, "kod_cast_obce")
+    cast_map = build_id_map(dst_cur, T("dim_cast_obce"), "kod_cast_obce", data["cast"])
     log.info("  dim_cast_obce: %d rows", len(cast_rows))
 
     # ── dim_agency ────────────────────────────────────────────────────────────
@@ -501,8 +487,8 @@ def load(dst_cur, data: dict):
         {"sreality_id": r["sreality_id"], "name": r["name"], "url": r["url"]}
         for r in data["agency"]
     ]
-    upsert_rows(dst_cur, f"{SCHEMA}.dim_agency", agency_rows, "sreality_id")
-    agency_map = build_id_map(dst_cur, f"{SCHEMA}.dim_agency", "sreality_id", data["agency"])
+    upsert_rows(dst_cur, T("dim_agency"), agency_rows, "sreality_id")
+    agency_map = build_id_map(dst_cur, T("dim_agency"), "sreality_id", data["agency"])
     log.info("  dim_agency: %d rows", len(agency_rows))
 
     # ── dim_date ──────────────────────────────────────────────────────────────
@@ -512,7 +498,7 @@ def load(dst_cur, data: dict):
          "week": r["week"], "day_of_week": r["day_of_week"], "is_weekend": r["is_weekend"]}
         for r in data["date"]
     ]
-    upsert_rows(dst_cur, f"{SCHEMA}.dim_date", date_rows, "date_id")
+    upsert_rows(dst_cur, T("dim_date"), date_rows, "date_id")
     date_map = {r["date_id"]: r["date_id"] for r in data["date"]}  # date_id is natural key
     log.info("  dim_date: %d rows", len(date_rows))
 
@@ -551,7 +537,7 @@ def load(dst_cur, data: dict):
                 row[pc] = r.get(pc)
             fact_rows.append(row)
 
-        inserted = insert_rows(dst_cur, f"{SCHEMA}.fact_{deal}_snapshot", fact_rows)
+        inserted = insert_rows(dst_cur, T(f"fact_{deal}_snapshot"), fact_rows)
         log.info("  fact_%s_snapshot: %d rows inserted", deal, inserted)
 
 
