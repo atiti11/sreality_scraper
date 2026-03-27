@@ -156,7 +156,7 @@ public class PostgresLoader implements AutoCloseable {
                 hash_id                  BIGINT       NOT NULL,
                 sreality_url             VARCHAR(200),
                 property_type            VARCHAR(50),
-                sub_category             VARCHAR(20),
+                sub_category             VARCHAR(100),
                 valid_from               DATE         NOT NULL,
                 valid_to                 DATE,
                 cast_obce_id             INT          REFERENCES %s.dim_cast_obce(id),

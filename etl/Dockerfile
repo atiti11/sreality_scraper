@@ -13,14 +13,14 @@ COPY --from=builder /build/target/sreality-etl-1.0-SNAPSHOT.jar app.jar
 RUN mkdir -p logs && chown -R etl:etl /app
 USER etl
 
-# Memory budget:
-#   JVM base:             ~80 MB
-#   Obec polygons:        ~60 MB  (simplified, ~6k polygons)
-#   ZSJ polygons:        ~120 MB  (simplified, ~45k polygons)
-#   STRtree indexes:      ~40 MB
-#   MongoDB batch:        ~20 MB
-#   JDBC + misc:          ~30 MB
-#   Safety margin:        ~50 MB
-#   Total peak:          ~400 MB → Xmx512m
-# ST_UKSG contains ZSJ polygons for all 6258 obec — needs more heap than ST_UZSZ
-ENTRYPOINT ["java", "-Xms64m", "-Xmx768m", "-XX:+UseContainerSupport", "-XX:+UseSerialGC", "-XX:ReservedCodeCacheSize=16m", "-XX:+ExitOnOutOfMemoryError", "-jar", "app.jar"]
+# Memory budget (ArcGIS hybrid mode — 6258 obec polygons, no ZSJ):
+#   JVM base:                  ~80 MB
+#   6258 obec polygons (JTS):  ~80 MB  (simplified + STRtree)
+#   MOS CSV parse buffer:      ~50 MB  (42 MB file in memory during parse)
+#   VFR XML (StAX streaming):  ~20 MB
+#   MongoDB batch (500 docs):  ~20 MB
+#   JDBC + HikariCP:           ~20 MB
+#   JVM overhead + GC:         ~50 MB
+#   Total peak:               ~320 MB → Xmx512m is enough
+#   Container limit:           768m    (2.4x headroom)
+ENTRYPOINT ["java", "-Xms64m", "-Xmx512m", "-XX:+UseContainerSupport", "-XX:+UseSerialGC", "-XX:ReservedCodeCacheSize=16m", "-XX:+ExitOnOutOfMemoryError", "-jar", "app.jar"]

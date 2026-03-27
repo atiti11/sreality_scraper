@@ -38,7 +38,7 @@ services:
         reservations:
           memory: 64m
         limits:
-          memory: 640m   # raised — ZSJ index (~45k polygons) needs more heap
+          memory: 768m   # JVM Xmx512m + OS/JVM overhead headroom
           pids: 50
     logging:
       driver: "json-file"
