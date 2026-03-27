@@ -447,8 +447,8 @@ def remap_fks(data: dict) -> dict:
 # ── Load ──────────────────────────────────────────────────────────────────────
 
 def create_schema(dst_cur):
-    log.info("Creating schema '%s' and tables...", SCHEMA)
-    dst_cur.execute(f"CREATE SCHEMA IF NOT EXISTS {SCHEMA}")
+    log.info("Creating tables in schema '%s'...", SCHEMA)
+    # Schema is pre-created by the university server admin — do not CREATE SCHEMA
     dst_cur.execute(DDL.replace("{s}", SCHEMA))
     log.info("Schema ready.")
 
