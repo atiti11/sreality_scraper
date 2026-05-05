@@ -1,0 +1,145 @@
+# docker-compose.pipeline.yml
+#
+# Extends docker-compose.yml with Postgres + Airflow (Java 21).
+# JARs are built locally and mounted from ./pipeline/jars/
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.pipeline.yml up -d
+#
+# First-time setup: see pipeline/BUILD.md
+
+networks:
+  scraper-net:
+    name: scraper-shared-net
+    driver: bridge
+
+volumes:
+  pg-data:
+  airflow-logs:
+
+x-airflow-env: &airflow-env
+  AIRFLOW__CORE__EXECUTOR: LocalExecutor
+  AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${PG_USERNAME:-sreality}:${PG_PASSWORD:-changeme}@postgres:5432/${PG_DATABASE:-sreality}
+  AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-}
+  AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY:-changeme-secret}
+  AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+  AIRFLOW__SCHEDULER__MAX_DAGRUNS_TO_CREATE_PER_LOOP: "2"
+  AIRFLOW__SCHEDULER__PARSING_PROCESSES: "1"
+  AIRFLOW__CORE__PARALLELISM: "4"
+  AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: "2"
+  # Pipeline connection vars inherited by all tasks
+  MONGO_HOST: mongodb
+  MONGO_PORT: "27017"
+  MONGO_DATABASE: ${MONGO_DATABASE:-sreality}
+  MONGO_USERNAME: ${MONGO_USERNAME:-scraper}
+  MONGO_PASSWORD: ${MONGO_PASSWORD:-changeme}
+  PG_HOST: postgres
+  PG_PORT: "5432"
+  PG_DATABASE: ${PG_DATABASE:-sreality}
+  PG_USERNAME: ${PG_USERNAME:-sreality}
+  PG_PASSWORD: ${PG_PASSWORD:-changeme}
+  PG_SCHEMA: ${PG_SCHEMA:-public}
+  SREALITY_BASE_URL: ${SREALITY_BASE_URL:-https://www.sreality.cz/api/cs/v2/estates}
+  REQUEST_DELAY_MS: ${REQUEST_DELAY_MS:-500}
+  TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+  TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+  CSU_XLSX_URLS: ${CSU_XLSX_URLS:-}
+  CSU_YEAR: ${CSU_YEAR:-2024}
+
+x-airflow-volumes: &airflow-volumes
+  - ./pipeline/airflow/dags:/opt/airflow/dags:ro
+  - airflow-logs:/opt/airflow/logs
+  - ./pipeline/jars:/jars:ro
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Postgres — source of truth for all enriched estate data.
+  # Schema is applied automatically on first start via postgres-init/01-schema.sh
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: sreality-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       ${PG_DATABASE:-sreality}
+      POSTGRES_USER:     ${PG_USERNAME:-sreality}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-changeme}
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      # Init scripts — only run on first container start (empty data volume)
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - scraper-net
+    ports:
+      - "127.0.0.1:${PG_HOST_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USERNAME:-sreality} -d ${PG_DATABASE:-sreality}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    mem_limit: 300m
+
+  # ---------------------------------------------------------------------------
+  # Airflow — custom image with Java 21 JRE for running pipeline JARs
+  # ---------------------------------------------------------------------------
+  airflow-init:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    container_name: sreality-airflow-init
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *airflow-env
+      _AIRFLOW_DB_MIGRATE: "true"
+      _AIRFLOW_WWW_USER_CREATE: "true"
+      _AIRFLOW_WWW_USER_USERNAME: ${AIRFLOW_USER:-admin}
+      _AIRFLOW_WWW_USER_PASSWORD: ${AIRFLOW_PASSWORD:-admin}
+    volumes: *airflow-volumes
+    command: version
+    networks:
+      - scraper-net
+
+  airflow-webserver:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    container_name: sreality-airflow-webserver
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment: *airflow-env
+    volumes: *airflow-volumes
+    ports:
+      - "127.0.0.1:${AIRFLOW_PORT:-8080}:8080"
+    command: webserver
+    networks:
+      - scraper-net
+    mem_limit: 400m
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  airflow-scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    container_name: sreality-airflow-scheduler
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment: *airflow-env
+    volumes: *airflow-volumes
+    command: scheduler
+    networks:
+      - scraper-net
+    mem_limit: 500m
