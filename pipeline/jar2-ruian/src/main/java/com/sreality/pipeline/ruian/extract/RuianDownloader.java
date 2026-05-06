@@ -155,13 +155,19 @@ public class RuianDownloader {
 
         if (isFile) {
             // Handle file:// URL (for local testing with mounted volumes)
-            Path srcFile = Paths.get(new java.net.URI(finalUrl));
+            URI fileUri;
+            try {
+                fileUri = URI.create(finalUrl);
+            } catch (IllegalArgumentException e) {
+                throw new IOException("Invalid local RUIAN file URL: " + finalUrl, e);
+            }
+            Path srcFile = Paths.get(fileUri);
             log.info("Reading local file: {}", srcFile);
             if (!Files.exists(srcFile)) {
                 throw new IOException("Local RUIAN file not found: " + srcFile);
             }
             try (InputStream fileStream = Files.newInputStream(srcFile);
-                    ZipInputStream zip = new ZipInputStream(fileStream)) {
+                 ZipInputStream zip = new ZipInputStream(fileStream)) {
                 if (zip.getNextEntry() == null)
                     throw new IOException("Empty zip from " + finalUrl);
                 Files.copy(zip, tmp, StandardCopyOption.REPLACE_EXISTING);
