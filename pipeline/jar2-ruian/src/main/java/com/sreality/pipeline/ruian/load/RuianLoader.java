@@ -24,12 +24,22 @@ public class RuianLoader {
     public void loadKraje(List<KrajRecord> rows) throws SQLException {
         String sql = "INSERT INTO " + pg.t("dim_kraj") + " (kod_kraje, nazev_kraje) VALUES (?,?)"
                    + " ON CONFLICT (kod_kraje) DO UPDATE SET nazev_kraje=EXCLUDED.nazev_kraje";
+        int ok = 0, skipped = 0;
         try (Connection c = pg.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             c.setAutoCommit(false);
-            for (KrajRecord r : rows) { ps.setString(1, r.kodKraje()); ps.setString(2, r.nazevKraje()); ps.addBatch(); }
-            ps.executeBatch(); c.commit();
+            for (KrajRecord r : rows) {
+                if (r.kodKraje() == null) { skipped++; continue; }
+                // Use kod as fallback name if Nazev is missing in the XML
+                String nazev = r.nazevKraje() != null ? r.nazevKraje() : "VUSC_" + r.kodKraje();
+                ps.setString(1, r.kodKraje());
+                ps.setString(2, nazev);
+                ps.addBatch();
+                ok++;
+            }
+            ps.executeBatch();
+            c.commit();
         }
-        log.info("Upserted {} kraj", rows.size());
+        log.info("Upserted {} kraj, skipped {} (null kod)", ok, skipped);
     }
 
     public void loadOkresy(List<OkresRecord> rows) throws SQLException {
@@ -45,8 +55,12 @@ public class RuianLoader {
                 lps.setString(1, r.kodKraje());
                 try (ResultSet rs = lps.executeQuery()) {
                     if (!rs.next()) { skip++; continue; }
-                    ups.setString(1, r.kodOkresu()); ups.setString(2, r.nazevOkresu()); ups.setInt(3, rs.getInt(1));
-                    ups.execute(); ok++;
+                    String nazev = r.nazevOkresu() != null ? r.nazevOkresu() : "OKRES_" + r.kodOkresu();
+                    ups.setString(1, r.kodOkresu());
+                    ups.setString(2, nazev);
+                    ups.setInt(3, rs.getInt(1));
+                    ups.execute();
+                    ok++;
                 }
             }
         }
@@ -66,9 +80,13 @@ public class RuianLoader {
                 lps.setString(1, r.kodOkresu());
                 try (ResultSet rs = lps.executeQuery()) {
                     if (!rs.next()) { skip++; continue; }
-                    ups.setString(1, r.kodObce()); ups.setString(2, r.nazevObce());
-                    ups.setInt(3, rs.getInt(1));   ups.setBoolean(4, r.isActive());
-                    ups.execute(); ok++;
+                    String nazev = r.nazevObce() != null ? r.nazevObce() : "OBEC_" + r.kodObce();
+                    ups.setString(1, r.kodObce());
+                    ups.setString(2, nazev);
+                    ups.setInt(3, rs.getInt(1));
+                    ups.setBoolean(4, r.isActive());
+                    ups.execute();
+                    ok++;
                 }
             }
         }
@@ -94,12 +112,15 @@ public class RuianLoader {
                 lps.setString(1, r.kodObce());
                 try (ResultSet rs = lps.executeQuery()) {
                     if (!rs.next()) { skip++; continue; }
-                    ups.setString(1, r.kodCastObce()); ups.setString(2, r.nazevCastObce());
+                    String nazev = r.nazevCastObce() != null ? r.nazevCastObce() : "CAST_" + r.kodCastObce();
+                    ups.setString(1, r.kodCastObce());
+                    ups.setString(2, nazev);
                     ups.setInt(3, rs.getInt(1));
                     ups.setDouble(4, r.bboxMinLat()); ups.setDouble(5, r.bboxMinLon());
                     ups.setDouble(6, r.bboxMaxLat()); ups.setDouble(7, r.bboxMaxLon());
                     ups.setDouble(8, r.centroidLat()); ups.setDouble(9, r.centroidLon());
-                    ups.execute(); ok++;
+                    ups.execute();
+                    ok++;
                 }
             }
         }
