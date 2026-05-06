@@ -42,7 +42,6 @@ jobs:
           cd initial-load
           mvn package -DskipTests -q
 
-      # Stage all JARs into clean flat directories before uploading
       - name: Stage JARs for upload
         run: |
           mkdir -p staging/pipeline-jars
@@ -70,11 +69,6 @@ jobs:
 
   # ===========================================================================
   # Job 2: Deploy to Hetzner server
-  #
-  # Order matters to avoid git conflicts:
-  #   1. SSH: git pull (clean state, no JARs yet)
-  #   2. SCP: copy JARs (after git pull, so no conflict with .gitkeep)
-  #   3. SSH: docker compose restart
   # ===========================================================================
   deploy:
     name: Deploy to server
@@ -137,7 +131,7 @@ jobs:
           echo "Initial-load JAR:"
           ls -lh initial-load/target/
 
-      # Step 1: git pull + write .env (no JARs on server yet — no conflict)
+      # Step 1: clean untracked files left by previous SCP runs, then pull
       - name: Pull code and write .env
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -158,7 +152,12 @@ jobs:
             set -e
             cd "$DEPLOY_PATH"
 
-            # Pull latest code — .gitkeep is tracked so git manages it cleanly
+            # Remove any untracked files that previous SCP runs may have placed
+            # in directories git now wants to manage (e.g. pipeline/jars/.gitkeep).
+            # --force removes untracked files, -d removes untracked directories.
+            # The paths are scoped so we never accidentally wipe anything else.
+            git clean -fd pipeline/jars/ initial-load/target/ || true
+
             git pull origin main
 
             escape() { printf '%s' "$1" | sed 's/\$/\$\$/g'; }
@@ -196,7 +195,7 @@ jobs:
               "CSU_YEAR=$(escape "$CSU_YEAR")" \
               > .env
 
-      # Step 2: SCP JARs — runs after git pull so no .gitkeep conflict
+      # Step 2: SCP JARs after git pull
       - name: Copy pipeline JARs to server
         uses: appleboy/scp-action@v0.1.7
         with:
