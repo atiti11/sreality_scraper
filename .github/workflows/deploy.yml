@@ -42,7 +42,7 @@ jobs:
           cd initial-load
           mvn package -DskipTests -q
 
-      # Stage all JARs into one flat directory — avoids path confusion in download
+      # Stage all JARs into clean flat directories before uploading
       - name: Stage JARs for upload
         run: |
           mkdir -p staging/pipeline-jars
@@ -70,6 +70,11 @@ jobs:
 
   # ===========================================================================
   # Job 2: Deploy to Hetzner server
+  #
+  # Order matters to avoid git conflicts:
+  #   1. SSH: git pull (clean state, no JARs yet)
+  #   2. SCP: copy JARs (after git pull, so no conflict with .gitkeep)
+  #   3. SSH: docker compose restart
   # ===========================================================================
   deploy:
     name: Deploy to server
@@ -132,25 +137,8 @@ jobs:
           echo "Initial-load JAR:"
           ls -lh initial-load/target/
 
-      - name: Copy pipeline JARs to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host:     ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key:      ${{ secrets.DEPLOY_SSH_KEY }}
-          source:   "pipeline/jars/"
-          target:   ${{ secrets.DEPLOY_PATH }}
-
-      - name: Copy initial-load JAR to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host:     ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key:      ${{ secrets.DEPLOY_SSH_KEY }}
-          source:   "initial-load/target/initial-load.jar"
-          target:   ${{ secrets.DEPLOY_PATH }}/initial-load/target/
-
-      - name: Deploy via SSH
+      # Step 1: git pull + write .env (no JARs on server yet — no conflict)
+      - name: Pull code and write .env
         uses: appleboy/ssh-action@v1.0.3
         with:
           host:     ${{ secrets.DEPLOY_HOST }}
@@ -170,6 +158,7 @@ jobs:
             set -e
             cd "$DEPLOY_PATH"
 
+            # Pull latest code — .gitkeep is tracked so git manages it cleanly
             git pull origin main
 
             escape() { printf '%s' "$1" | sed 's/\$/\$\$/g'; }
@@ -206,6 +195,41 @@ jobs:
               "CSU_XLSX_URLS=$(escape "$CSU_XLSX_URLS")" \
               "CSU_YEAR=$(escape "$CSU_YEAR")" \
               > .env
+
+      # Step 2: SCP JARs — runs after git pull so no .gitkeep conflict
+      - name: Copy pipeline JARs to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host:     ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key:      ${{ secrets.DEPLOY_SSH_KEY }}
+          source:   "pipeline/jars/"
+          target:   ${{ secrets.DEPLOY_PATH }}
+
+      - name: Copy initial-load JAR to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host:     ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key:      ${{ secrets.DEPLOY_SSH_KEY }}
+          source:   "initial-load/target/initial-load.jar"
+          target:   ${{ secrets.DEPLOY_PATH }}/initial-load/target/
+
+      # Step 3: restart Docker services
+      - name: Restart services
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:     ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key:      ${{ secrets.DEPLOY_SSH_KEY }}
+          envs: DEPLOY_PATH
+          script: |
+            set -e
+            cd "$DEPLOY_PATH"
+
+            echo "=== JARs on server ==="
+            ls -lh pipeline/jars/
+            ls -lh initial-load/target/
 
             # Original scraper + MongoDB
             docker compose -f docker-compose.yml build --no-cache scraper
