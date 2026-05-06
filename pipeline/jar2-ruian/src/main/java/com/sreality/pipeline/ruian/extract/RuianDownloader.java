@@ -1,9 +1,11 @@
 package com.sreality.pipeline.ruian.extract;
 
 import org.apache.hc.client5.http.classic.methods.HttpGet;
+import org.apache.hc.client5.http.config.RequestConfig;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
+import org.apache.hc.core5.util.TimeValue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -174,7 +176,14 @@ public class RuianDownloader {
             }
         } else {
             // Handle HTTP(S) URL
-            try (CloseableHttpClient http = HttpClients.createDefault()) {
+            RequestConfig requestConfig = RequestConfig.custom()
+                    .setConnectTimeout(TimeValue.ofSeconds(30))
+                    .setResponseTimeout(TimeValue.ofSeconds(120))
+                    .build();
+
+            try (CloseableHttpClient http = HttpClients.custom()
+                    .setDefaultRequestConfig(requestConfig)
+                    .build()) {
                 URI uri;
                 try {
                     uri = URI.create(finalUrl);
@@ -182,7 +191,10 @@ public class RuianDownloader {
                     throw new IOException("Invalid RUIAN URL format: " + finalUrl, e);
                 }
 
-                http.execute(new HttpGet(uri), response -> {
+                HttpGet request = new HttpGet(uri);
+                request.setHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+
+                http.execute(request, response -> {
                     int code = response.getCode();
                     if (code != 200)
                         throw new IOException("HTTP " + code + " from " + finalUrl);
