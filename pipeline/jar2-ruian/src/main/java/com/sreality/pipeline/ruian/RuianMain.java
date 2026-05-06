@@ -15,8 +15,9 @@ import java.time.format.DateTimeFormatter;
 /**
  * JAR 2 entry point — RUIAN dimension loader.
  *
- * 1. Freshness check: is remote snapshot newer than what is in Postgres?
- * 2. If not newer: exit 0 (Airflow task succeeds, nothing to do).
+ * 1. Resolve best available URL (current month, or previous month if 404,
+ *    or RUIAN_OVERRIDE_URL env var for manual override).
+ * 2. Freshness check: skip if already loaded.
  * 3. Download + unzip RUIAN VFR XML.
  * 4. Parse kraj / okres / obec / cast_obce via StAX.
  * 5. Upsert all dimension tables (top-down FK order).
@@ -29,11 +30,13 @@ public class RuianMain {
 
     public static void main(String[] args) {
         log.info("=== JAR 2: RUIAN Loader ===");
-        String url = RuianDownloader.buildUrl(LocalDate.now());
 
         try (PostgresConnectionPool pg = new PostgresConnectionPool()) {
-            RuianLoader loader    = new RuianLoader(pg);
+            RuianLoader loader     = new RuianLoader(pg);
             LocalDate   lastLoaded = loader.getLastSnapshotDate();
+
+            // Resolve best available URL (handles month-end delays automatically)
+            String url = RuianDownloader.resolveUrl();
 
             if (!RuianDownloader.isUpdateAvailable(url, lastLoaded)) {
                 log.info("RUIAN already current — nothing to do.");
@@ -49,8 +52,9 @@ public class RuianMain {
                 loader.loadCastiObci(result.castiObci());
 
                 // Parse snapshot date from URL filename: YYYYMMDD_ST_UKSG.xml.zip
-                String fname    = url.substring(url.lastIndexOf('/') + 1);
-                LocalDate snap  = LocalDate.parse(fname.substring(0, 8), DateTimeFormatter.ofPattern("yyyyMMdd"));
+                String fname   = url.substring(url.lastIndexOf('/') + 1);
+                LocalDate snap = LocalDate.parse(fname.substring(0, 8),
+                    DateTimeFormatter.ofPattern("yyyyMMdd"));
                 loader.saveSnapshotDate(snap, result.castiObci().size());
 
                 log.info("RUIAN load complete: {} kraj / {} okres / {} obec / {} cast_obce",
