@@ -47,23 +47,15 @@ public class RuianVfrParser {
             while (r.hasNext()) {
                 if (r.next() != XMLStreamConstants.START_ELEMENT) continue;
                 switch (r.getLocalName()) {
-                    case "Vusc"     -> {
-                        // <vf:Vusc> is a container; individual kraje are <vci:Vusc> children
-                        while (r.hasNext()) {
-                            int ev = r.next();
-                            if (ev == XMLStreamConstants.END_ELEMENT) break;
-                            if (ev != XMLStreamConstants.START_ELEMENT) continue;
-                            if ("Vusc".equals(r.getLocalName())) {
-                                KrajRecord k = parseVusc(r);
-                                if (k != null) kraje.add(k);
-                            } else {
-                                skipElement(r);
-                            }
-                        }
-                    }
-                    case "Okres"    -> { OkresRecord o    = parseOkres(r);     if (o  != null) okresy.add(o); }
-                    case "Obec"     -> { ObecRecord ob    = parseObec(r);      if (ob != null) obce.add(ob); }
-                    case "CastObce" -> { CastObceRecord c = parseCastObce(r);  if (c  != null) castiObci.add(c); }
+                    // Each case handles a container element by iterating its children.
+                    // default -> skipElement ensures FK references inside unrecognised
+                    // containers (KatastralniUzemi, SpravniObvody, Orp, …) never leak
+                    // into the parser as false Obec/Okres records.
+                    case "Vusc"       -> parseContainerOf(r, "Vusc",      sub -> { KrajRecord k     = parseVusc(sub);      if (k  != null) kraje.add(k); });
+                    case "Okresy"     -> parseContainerOf(r, "Okres",     sub -> { OkresRecord o    = parseOkres(sub);     if (o  != null) okresy.add(o); });
+                    case "Obce"       -> parseContainerOf(r, "Obec",      sub -> { ObecRecord ob    = parseObec(sub);      if (ob != null) obce.add(ob); });
+                    case "CastiObci"  -> parseContainerOf(r, "CastObce",  sub -> { CastObceRecord c = parseCastObce(sub);  if (c  != null) castiObci.add(c); });
+                    default           -> skipElement(r);
                 }
             }
             r.close();
@@ -71,6 +63,28 @@ public class RuianVfrParser {
         log.info("Parsed: {} vusc(kraj), {} okres, {} obec, {} cast_obce",
             kraje.size(), okresy.size(), obce.size(), castiObci.size());
         return new ParseResult(kraje, okresy, obce, castiObci);
+    }
+
+    @FunctionalInterface
+    private interface XmlConsumer {
+        void accept(XMLStreamReader r) throws XMLStreamException;
+    }
+
+    // Reader is ON the container START_ELEMENT (e.g. <vf:Okresy>).
+    // Iterates children; calls handler for each child whose local name matches
+    // childLocalName; skips everything else. Consumes through the container END_ELEMENT.
+    private void parseContainerOf(XMLStreamReader r, String childLocalName, XmlConsumer handler)
+            throws XMLStreamException {
+        while (r.hasNext()) {
+            int ev = r.next();
+            if (ev == XMLStreamConstants.END_ELEMENT) break;
+            if (ev != XMLStreamConstants.START_ELEMENT) continue;
+            if (childLocalName.equals(r.getLocalName())) {
+                handler.accept(r);
+            } else {
+                skipElement(r);
+            }
+        }
     }
 
     // -------------------------------------------------------------------------
