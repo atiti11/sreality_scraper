@@ -129,6 +129,7 @@ public class RuianDownloader {
 
     /**
      * Downloads the zip and extracts the XML to a temp file.
+     * Supports both HTTP(S) URLs and file:// URLs (for local testing).
      * Caller must delete the returned path after use.
      */
     public static Path downloadAndExtract(String url) throws IOException {
@@ -138,8 +139,11 @@ public class RuianDownloader {
         }
         
         url = url.trim();
-        if (!url.startsWith("http://") && !url.startsWith("https://")) {
-            throw new IOException("RUIAN URL must be absolute (http/https): " + url);
+        boolean isFile = url.startsWith("file://");
+        boolean isHttp = url.startsWith("http://") || url.startsWith("https://");
+        
+        if (!isHttp && !isFile) {
+            throw new IOException("RUIAN URL must be absolute (http/https or file://): " + url);
         }
 
         log.info("Downloading RUIAN from: {}", url);
@@ -147,25 +151,42 @@ public class RuianDownloader {
                   url.substring(0, Math.min(100, url.length())));
         
         Path tmp = Files.createTempFile("ruian_", ".xml");
-        try (CloseableHttpClient http = HttpClients.createDefault()) {
-            URI uri;
-            try {
-                uri = URI.create(url);
-            } catch (IllegalArgumentException e) {
-                throw new IOException("Invalid RUIAN URL format: " + url, e);
+        final String finalUrl = url; // For use in lambda expressions
+        
+        if (isFile) {
+            // Handle file:// URL (for local testing with mounted volumes)
+            Path srcFile = Paths.get(new java.net.URI(finalUrl));
+            log.info("Reading local file: {}", srcFile);
+            if (!Files.exists(srcFile)) {
+                throw new IOException("Local RUIAN file not found: " + srcFile);
             }
-            
-            http.execute(new HttpGet(uri), response -> {
-                int code = response.getCode();
-                if (code != 200) throw new IOException("HTTP " + code + " from " + url);
-                try (InputStream body = response.getEntity().getContent();
-                     ZipInputStream zip  = new ZipInputStream(body)) {
-                    if (zip.getNextEntry() == null) throw new IOException("Empty zip from " + url);
-                    Files.copy(zip, tmp, StandardCopyOption.REPLACE_EXISTING);
+            try (InputStream fileStream = Files.newInputStream(srcFile);
+                 ZipInputStream zip = new ZipInputStream(fileStream)) {
+                if (zip.getNextEntry() == null) throw new IOException("Empty zip from " + finalUrl);
+                Files.copy(zip, tmp, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } else {
+            // Handle HTTP(S) URL
+            try (CloseableHttpClient http = HttpClients.createDefault()) {
+                URI uri;
+                try {
+                    uri = URI.create(finalUrl);
+                } catch (IllegalArgumentException e) {
+                    throw new IOException("Invalid RUIAN URL format: " + finalUrl, e);
                 }
-                EntityUtils.consume(response.getEntity());
-                return null;
-            });
+                
+                http.execute(new HttpGet(uri), response -> {
+                    int code = response.getCode();
+                    if (code != 200) throw new IOException("HTTP " + code + " from " + finalUrl);
+                    try (InputStream body = response.getEntity().getContent();
+                         ZipInputStream zip  = new ZipInputStream(body)) {
+                        if (zip.getNextEntry() == null) throw new IOException("Empty zip from " + finalUrl);
+                        Files.copy(zip, tmp, StandardCopyOption.REPLACE_EXISTING);
+                    }
+                    EntityUtils.consume(response.getEntity());
+                    return null;
+                });
+            }
         }
         log.info("Extracted RUIAN XML to {} ({} MB)", tmp, Files.size(tmp) / 1_048_576);
         return tmp;
