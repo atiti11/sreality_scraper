@@ -167,7 +167,7 @@ public class RuianDownloader {
                 throw new IOException("Local RUIAN file not found: " + srcFile);
             }
             try (InputStream fileStream = Files.newInputStream(srcFile);
-                 ZipInputStream zip = new ZipInputStream(fileStream)) {
+                    ZipInputStream zip = new ZipInputStream(fileStream)) {
                 if (zip.getNextEntry() == null)
                     throw new IOException("Empty zip from " + finalUrl);
                 Files.copy(zip, tmp, StandardCopyOption.REPLACE_EXISTING);
