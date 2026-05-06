@@ -20,23 +20,23 @@ import java.util.zip.ZipInputStream;
  * Downloads the RUIAN full-state VFR XML snapshot from CUZK.
  *
  * Correct URL structure (verified May 2026):
- *   Base:      https://services.cuzk.gov.cz/vfr/YYYYMM/
- *   File:      YYYYMMDD_ST_UKSG.xml.zip
- *   Date:      last day of the previous month (e.g. 20260228 in directory 202602)
+ * Base: https://services.cuzk.gov.cz/vfr/YYYYMM/
+ * File: YYYYMMDD_ST_UKSG.xml.zip
+ * Date: last day of the previous month (e.g. 20260228 in directory 202602)
  *
  * The old vdp.cuzk.gov.cz URL is no longer used.
  *
  * Resolution strategy:
- *   1. RUIAN_OVERRIDE_URL env var — use exactly this URL.
- *   2. Walk back from current month, trying up to MAX_MONTHS_BACK months,
- *      until a directory listing returns HTTP 200 and the ST_UKSG file is found.
+ * 1. RUIAN_OVERRIDE_URL env var — use exactly this URL.
+ * 2. Walk back from current month, trying up to MAX_MONTHS_BACK months,
+ * until a directory listing returns HTTP 200 and the ST_UKSG file is found.
  */
 public class RuianDownloader {
 
     private static final Logger log = LoggerFactory.getLogger(RuianDownloader.class);
 
-    private static final String BASE_URL  = "https://services.cuzk.gov.cz/vfr/";
-    private static final DateTimeFormatter DIR_FMT  = DateTimeFormatter.ofPattern("yyyyMM");
+    private static final String BASE_URL = "https://services.cuzk.gov.cz/vfr/";
+    private static final DateTimeFormatter DIR_FMT = DateTimeFormatter.ofPattern("yyyyMM");
     private static final DateTimeFormatter FILE_FMT = DateTimeFormatter.ofPattern("yyyyMMdd");
     private static final int MAX_MONTHS_BACK = 6;
 
@@ -48,7 +48,7 @@ public class RuianDownloader {
     public static String buildUrl(YearMonth month) {
         // File date = last day of the month
         LocalDate fileDate = month.atEndOfMonth();
-        String dir  = month.format(DIR_FMT);
+        String dir = month.format(DIR_FMT);
         String file = fileDate.format(FILE_FMT) + "_ST_UKSG.xml.zip";
         return BASE_URL + dir + "/" + file;
     }
@@ -103,13 +103,13 @@ public class RuianDownloader {
         }
 
         throw new IOException(
-            "No RUIAN snapshot found in the last " + MAX_MONTHS_BACK + " months. "
-            + "Check " + BASE_URL + " manually, then set RUIAN_OVERRIDE_URL env var.");
+                "No RUIAN snapshot found in the last " + MAX_MONTHS_BACK + " months. "
+                        + "Check " + BASE_URL + " manually, then set RUIAN_OVERRIDE_URL env var.");
     }
 
     private static boolean urlAvailable(String url) {
         try (CloseableHttpClient http = HttpClients.createDefault()) {
-            final int[] code = {0};
+            final int[] code = { 0 };
             URI uri = URI.create(url);
             http.execute(new HttpGet(uri), response -> {
                 code[0] = response.getCode();
@@ -137,22 +137,22 @@ public class RuianDownloader {
         if (url == null || url.isBlank()) {
             throw new IOException("RUIAN URL is null or empty");
         }
-        
+
         url = url.trim();
         boolean isFile = url.startsWith("file://");
         boolean isHttp = url.startsWith("http://") || url.startsWith("https://");
-        
+
         if (!isHttp && !isFile) {
             throw new IOException("RUIAN URL must be absolute (http/https or file://): " + url);
         }
 
         log.info("Downloading RUIAN from: {}", url);
-        log.debug("URL length: {}, first 100 chars: {}", url.length(), 
-                  url.substring(0, Math.min(100, url.length())));
-        
+        log.debug("URL length: {}, first 100 chars: {}", url.length(),
+                url.substring(0, Math.min(100, url.length())));
+
         Path tmp = Files.createTempFile("ruian_", ".xml");
         final String finalUrl = url; // For use in lambda expressions
-        
+
         if (isFile) {
             // Handle file:// URL (for local testing with mounted volumes)
             Path srcFile = Paths.get(new java.net.URI(finalUrl));
@@ -161,8 +161,9 @@ public class RuianDownloader {
                 throw new IOException("Local RUIAN file not found: " + srcFile);
             }
             try (InputStream fileStream = Files.newInputStream(srcFile);
-                 ZipInputStream zip = new ZipInputStream(fileStream)) {
-                if (zip.getNextEntry() == null) throw new IOException("Empty zip from " + finalUrl);
+                    ZipInputStream zip = new ZipInputStream(fileStream)) {
+                if (zip.getNextEntry() == null)
+                    throw new IOException("Empty zip from " + finalUrl);
                 Files.copy(zip, tmp, StandardCopyOption.REPLACE_EXISTING);
             }
         } else {
@@ -174,13 +175,15 @@ public class RuianDownloader {
                 } catch (IllegalArgumentException e) {
                     throw new IOException("Invalid RUIAN URL format: " + finalUrl, e);
                 }
-                
+
                 http.execute(new HttpGet(uri), response -> {
                     int code = response.getCode();
-                    if (code != 200) throw new IOException("HTTP " + code + " from " + finalUrl);
+                    if (code != 200)
+                        throw new IOException("HTTP " + code + " from " + finalUrl);
                     try (InputStream body = response.getEntity().getContent();
-                         ZipInputStream zip  = new ZipInputStream(body)) {
-                        if (zip.getNextEntry() == null) throw new IOException("Empty zip from " + finalUrl);
+                            ZipInputStream zip = new ZipInputStream(body)) {
+                        if (zip.getNextEntry() == null)
+                            throw new IOException("Empty zip from " + finalUrl);
                         Files.copy(zip, tmp, StandardCopyOption.REPLACE_EXISTING);
                     }
                     EntityUtils.consume(response.getEntity());
