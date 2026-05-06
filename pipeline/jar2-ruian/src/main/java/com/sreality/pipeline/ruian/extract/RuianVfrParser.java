@@ -47,15 +47,18 @@ public class RuianVfrParser {
             while (r.hasNext()) {
                 if (r.next() != XMLStreamConstants.START_ELEMENT) continue;
                 switch (r.getLocalName()) {
-                    // Each case handles a container element by iterating its children.
-                    // default -> skipElement ensures FK references inside unrecognised
-                    // containers (KatastralniUzemi, SpravniObvody, Orp, …) never leak
-                    // into the parser as false Obec/Okres records.
-                    case "Vusc"       -> parseContainerOf(r, "Vusc",      sub -> { KrajRecord k     = parseVusc(sub);      if (k  != null) kraje.add(k); });
-                    case "Okresy"     -> parseContainerOf(r, "Okres",     sub -> { OkresRecord o    = parseOkres(sub);     if (o  != null) okresy.add(o); });
-                    case "Obce"       -> parseContainerOf(r, "Obec",      sub -> { ObecRecord ob    = parseObec(sub);      if (ob != null) obce.add(ob); });
-                    case "CastiObci"  -> parseContainerOf(r, "CastObce",  sub -> { CastObceRecord c = parseCastObce(sub);  if (c  != null) castiObci.add(c); });
-                    default           -> skipElement(r);
+                    // Known entity containers: iterate children, parse each record.
+                    case "Vusc"      -> parseContainerOf(r, "Vusc",     sub -> { KrajRecord k     = parseVusc(sub);      if (k  != null) kraje.add(k); });
+                    case "Okresy"    -> parseContainerOf(r, "Okres",    sub -> { OkresRecord o    = parseOkres(sub);     if (o  != null) okresy.add(o); });
+                    case "Obce"      -> parseContainerOf(r, "Obec",     sub -> { ObecRecord ob    = parseObec(sub);      if (ob != null) obce.add(ob); });
+                    case "CastiObci" -> parseContainerOf(r, "CastObce", sub -> { CastObceRecord c = parseCastObce(sub);  if (c  != null) castiObci.add(c); });
+                    // Explicitly skip containers whose children contain Obec/Okres/CastObce
+                    // FK references — without this they leak into the cases above.
+                    case "KatastralniUzemi", "SpravniObvody",
+                         "Orp", "Pou", "Momc", "Mop", "Zsj",
+                         "RegionySoudrznosti", "Staty", "Hlavicka" -> skipElement(r);
+                    // No default: wrapper elements (VymennyFormat, Data, …) are
+                    // traversed naturally by the StAX event loop.
                 }
             }
             r.close();
