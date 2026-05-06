@@ -20,23 +20,20 @@ import java.util.List;
 /**
  * JAR 3 entry point — CSU statistics loader.
  *
- * Modes (set via env var CSU_MODE):
- *   full   — initial full load: downloads all available XLSX files,
- *             reads OD_KAM sheets to seed obec_successor, loads all years.
- *   update — incremental: downloads only the latest year's XLSX files
- *             and upserts new rows. No changes to obec_successor.
+ * Supports two input modes:
  *
- * CSU XLSX files are hosted at:
- *   https://www.czso.cz/documents/10180/... (stable URLs per year)
+ *   CSU_LOCAL_FILES=/path/a.xlsx,/path/b.xlsx
+ *     Reads XLSX files from local paths (pre-downloaded by curl in Airflow).
+ *     Takes priority over CSU_XLSX_URLS.
  *
- * For simplicity, the URLs are read from env var CSU_XLSX_URLS (comma-separated).
- * In practice, the Airflow DAG sets this variable pointing to the correct URLs.
+ *   CSU_XLSX_URLS=https://...a.xlsx,https://...b.xlsx
+ *     Downloads XLSX files via HTTP. Used as fallback if CSU_LOCAL_FILES not set.
  *
- * Env vars:
- *   CSU_MODE          full | update  (default: update)
- *   CSU_XLSX_URLS     comma-separated list of XLSX download URLs
- *   CSU_YEAR          year to tag update rows with (default: current year)
- *   PG_*              Postgres connection
+ * CSU_MODE:
+ *   full   — seeds obec_successor from OD_KAM sheets + loads all years
+ *   update — incremental upsert of latest year only (default)
+ *
+ * CSU_YEAR: year to tag rows with (default: current year)
  */
 public class CsuMain {
 
@@ -45,42 +42,72 @@ public class CsuMain {
     public static void main(String[] args) {
         log.info("=== JAR 3: CSU Loader ===");
 
-        String mode  = env("CSU_MODE", "update");
-        String urls  = env("CSU_XLSX_URLS", "");
-        int    year  = Integer.parseInt(env("CSU_YEAR", String.valueOf(Year.now().getValue())));
+        String mode       = env("CSU_MODE",        "update");
+        String localFiles = env("CSU_LOCAL_FILES",  "");
+        String urls       = env("CSU_XLSX_URLS",    "");
+        int    year       = Integer.parseInt(env("CSU_YEAR",
+                                String.valueOf(Year.now().getValue())));
 
-        if (urls.isBlank()) {
-            log.error("CSU_XLSX_URLS is not set — nothing to download.");
+        if (localFiles.isBlank() && urls.isBlank()) {
+            log.error("Neither CSU_LOCAL_FILES nor CSU_XLSX_URLS is set — nothing to load.");
             System.exit(1);
         }
 
-        String[] urlList = urls.split(",");
-        log.info("Mode: {}, year: {}, files: {}", mode, year, urlList.length);
+        log.info("Mode: {}, year: {}", mode, year);
 
         try (PostgresConnectionPool pg = new PostgresConnectionPool()) {
-            CsuLoader     loader = new CsuLoader(pg);
-            CsuXlsxParser parser = new CsuXlsxParser();
+            CsuLoader     loader       = new CsuLoader(pg);
+            CsuXlsxParser parser       = new CsuXlsxParser();
+            var allSuccessors          = new ArrayList<com.sreality.pipeline.csu.model.ObecSuccessorRecord>();
+            var allStats               = new ArrayList<com.sreality.pipeline.csu.model.ObecStatsRecord>();
 
-            var allSuccessors = new ArrayList<com.sreality.pipeline.csu.model.ObecSuccessorRecord>();
-            var allStats      = new ArrayList<com.sreality.pipeline.csu.model.ObecStatsRecord>();
-
-            for (String rawUrl : urlList) {
-                String url = rawUrl.trim();
-                if (url.isBlank()) continue;
-                log.info("Downloading {}", url);
-
-                try (CloseableHttpClient http = HttpClients.createDefault()) {
-                    http.execute(new HttpGet(URI.create(url)), response -> {
-                        if (response.getCode() != 200)
-                            throw new RuntimeException("HTTP " + response.getCode() + " from " + url);
-                        try (InputStream body = response.getEntity().getContent()) {
-                            ParseResult result = parser.parse(body, year);
-                            allSuccessors.addAll(result.successors());
-                            allStats.addAll(result.stats());
-                        }
-                        return null;
-                    });
+            if (!localFiles.isBlank()) {
+                // ── Local file mode (pre-downloaded by curl) ──────────────────
+                String[] paths = localFiles.split(",");
+                log.info("Reading {} local XLSX file(s)", paths.length);
+                for (String rawPath : paths) {
+                    String path = rawPath.trim();
+                    if (path.isBlank()) continue;
+                    Path p = Path.of(path);
+                    if (!Files.exists(p)) {
+                        log.warn("Local file not found, skipping: {}", path);
+                        continue;
+                    }
+                    log.info("Parsing local file: {} ({} KB)",
+                        path, Files.size(p) / 1024);
+                    try (InputStream is = Files.newInputStream(p)) {
+                        ParseResult result = parser.parse(is, year);
+                        allSuccessors.addAll(result.successors());
+                        allStats.addAll(result.stats());
+                    }
                 }
+            } else {
+                // ── URL mode (download via HTTP) ──────────────────────────────
+                String[] urlList = urls.split(",");
+                log.info("Downloading {} XLSX file(s) via HTTP", urlList.length);
+                for (String rawUrl : urlList) {
+                    String url = rawUrl.trim();
+                    if (url.isBlank()) continue;
+                    log.info("Downloading {}", url);
+                    try (CloseableHttpClient http = HttpClients.createDefault()) {
+                        http.execute(new HttpGet(URI.create(url)), response -> {
+                            if (response.getCode() != 200)
+                                throw new RuntimeException(
+                                    "HTTP " + response.getCode() + " from " + url);
+                            try (InputStream body = response.getEntity().getContent()) {
+                                ParseResult result = parser.parse(body, year);
+                                allSuccessors.addAll(result.successors());
+                                allStats.addAll(result.stats());
+                            }
+                            return null;
+                        });
+                    }
+                }
+            }
+
+            if (allSuccessors.isEmpty() && allStats.isEmpty()) {
+                log.warn("No data parsed from any file — check file paths and formats.");
+                return;
             }
 
             // On full load: seed successor table first
@@ -89,7 +116,6 @@ public class CsuMain {
                 loader.loadSuccessors(allSuccessors);
             }
 
-            // Load stats (always)
             log.info("Loading {} stat rows", allStats.size());
             loader.loadStats(allStats);
 

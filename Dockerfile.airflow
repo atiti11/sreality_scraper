@@ -1,6 +1,6 @@
 # Dockerfile.airflow
-# Multi-stage: copy Java 21 JRE from the official Temurin image into Airflow.
-# This avoids any apt repository or GPG key issues entirely.
+# Custom Airflow image with Java 21 JRE for running pipeline JARs.
+# curl is explicitly installed for reliable large-file downloads (e.g. RUIAN 332MB).
 
 FROM eclipse-temurin:21-jre-jammy AS java
 
@@ -14,7 +14,13 @@ COPY --from=java /opt/java/openjdk /opt/java/openjdk
 ENV JAVA_HOME=/opt/java/openjdk
 ENV PATH="$JAVA_HOME/bin:$PATH"
 
-# Verify
-RUN java -version
+# Ensure curl is installed (used by RuianDownloader for large file downloads)
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl \
+ && apt-get clean \
+ && rm -rf /var/lib/apt/lists/*
+
+# Verify both are available
+RUN java -version && curl --version
 
 USER airflow
