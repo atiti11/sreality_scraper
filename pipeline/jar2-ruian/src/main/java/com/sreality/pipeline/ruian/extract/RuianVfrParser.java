@@ -88,22 +88,22 @@ public class RuianVfrParser {
     // -------------------------------------------------------------------------
 
     private OkresRecord parseOkres(XMLStreamReader r) throws XMLStreamException {
-        String kod = null, nazev = null, kodVusc = null;
+        String kod = null, nazev = null, kodKraje = null;
         while (r.hasNext()) {
             int ev = r.next();
             if (ev == XMLStreamConstants.START_ELEMENT) {
                 switch (r.getLocalName()) {
-                    case "Kod"     -> kod     = r.getElementText();
-                    case "Nazev"   -> nazev   = r.getElementText();
+                    case "Kod"     -> kod      = r.getElementText();
+                    case "Nazev"   -> nazev    = r.getElementText();
                     // VFR uses VuscKod to reference the parent Vusc (our dim_kraj)
-                    case "VuscKod" -> kodVusc = r.getElementText();
+                    case "VuscKod" -> kodKraje = r.getElementText();
                     // Older VFR versions used KrajKod — keep as fallback
-                    case "KrajKod" -> { if (kodVusc == null) kodVusc = r.getElementText(); }
+                    case "KrajKod" -> { if (kodKraje == null) kodKraje = r.getElementText(); }
                 }
             } else if (ev == XMLStreamConstants.END_ELEMENT && "Okres".equals(r.getLocalName())) break;
         }
         if (kod == null) return null;
-        return new OkresRecord(kod, nazev, kodVusc);
+        return new OkresRecord(kod, nazev, kodKraje);
     }
 
     // -------------------------------------------------------------------------

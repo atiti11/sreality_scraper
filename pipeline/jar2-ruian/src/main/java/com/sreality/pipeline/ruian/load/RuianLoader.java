@@ -51,7 +51,10 @@ public class RuianLoader {
              PreparedStatement lps = c.prepareStatement(lookup);
              PreparedStatement ups = c.prepareStatement(upsert)) {
             for (OkresRecord r : rows) {
-                if (r.kodKraje() == null) { skip++; continue; }
+                if (r.kodKraje() == null) {
+                    log.debug("Skipping okres {}: null kodKraje", r.kodOkresu());
+                    skip++; continue;
+                }
                 lps.setString(1, r.kodKraje());
                 try (ResultSet rs = lps.executeQuery()) {
                     if (!rs.next()) { skip++; continue; }
@@ -76,7 +79,10 @@ public class RuianLoader {
              PreparedStatement lps = c.prepareStatement(lookup);
              PreparedStatement ups = c.prepareStatement(upsert)) {
             for (ObecRecord r : rows) {
-                if (r.kodOkresu() == null) { skip++; continue; }
+                if (r.kodOkresu() == null) {
+                    log.debug("Skipping obec {}: null kodOkresu", r.kodObce());
+                    skip++; continue;
+                }
                 lps.setString(1, r.kodOkresu());
                 try (ResultSet rs = lps.executeQuery()) {
                     if (!rs.next()) { skip++; continue; }
@@ -108,7 +114,14 @@ public class RuianLoader {
              PreparedStatement lps = c.prepareStatement(lookup);
              PreparedStatement ups = c.prepareStatement(upsert)) {
             for (CastObceRecord r : rows) {
-                if (r.kodObce() == null || r.centroidLat() == 0) { skip++; continue; }
+                if (r.kodObce() == null) {
+                    log.debug("Skipping cast_obce {}: null kodObce", r.kodCastObce());
+                    skip++; continue;
+                }
+                if (r.centroidLat() == 0 && r.centroidLon() == 0) {
+                    log.debug("Skipping cast_obce {}: zero coordinates", r.kodCastObce());
+                    skip++; continue;
+                }
                 lps.setString(1, r.kodObce());
                 try (ResultSet rs = lps.executeQuery()) {
                     if (!rs.next()) { skip++; continue; }
