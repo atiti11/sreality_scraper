@@ -82,6 +82,10 @@ public class RuianDownloader {
     public static String resolveUrl() throws IOException {
         String override = System.getenv("RUIAN_OVERRIDE_URL");
         if (override != null && !override.isBlank()) {
+            override = override.trim();
+            if (!override.startsWith("http")) {
+                throw new IOException("RUIAN_OVERRIDE_URL must be absolute HTTP(S): " + override);
+            }
             log.info("Using RUIAN_OVERRIDE_URL: {}", override);
             return override;
         }
@@ -106,13 +110,17 @@ public class RuianDownloader {
     private static boolean urlAvailable(String url) {
         try (CloseableHttpClient http = HttpClients.createDefault()) {
             final int[] code = {0};
-            http.execute(new HttpGet(URI.create(url)), response -> {
+            URI uri = URI.create(url);
+            http.execute(new HttpGet(uri), response -> {
                 code[0] = response.getCode();
                 EntityUtils.consume(response.getEntity());
                 return null;
             });
             log.debug("URL {} → HTTP {}", url, code[0]);
             return code[0] == 200;
+        } catch (IllegalArgumentException e) {
+            log.debug("URL {} is malformed: {}", url, e.getMessage());
+            return false;
         } catch (Exception e) {
             log.debug("URL {} unreachable: {}", url, e.getMessage());
             return false;
@@ -124,10 +132,30 @@ public class RuianDownloader {
      * Caller must delete the returned path after use.
      */
     public static Path downloadAndExtract(String url) throws IOException {
-        log.info("Downloading RUIAN from {}", url);
+        // Validate URL before attempting to use it
+        if (url == null || url.isBlank()) {
+            throw new IOException("RUIAN URL is null or empty");
+        }
+        
+        url = url.trim();
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            throw new IOException("RUIAN URL must be absolute (http/https): " + url);
+        }
+
+        log.info("Downloading RUIAN from: {}", url);
+        log.debug("URL length: {}, first 100 chars: {}", url.length(), 
+                  url.substring(0, Math.min(100, url.length())));
+        
         Path tmp = Files.createTempFile("ruian_", ".xml");
         try (CloseableHttpClient http = HttpClients.createDefault()) {
-            http.execute(new HttpGet(URI.create(url)), response -> {
+            URI uri;
+            try {
+                uri = URI.create(url);
+            } catch (IllegalArgumentException e) {
+                throw new IOException("Invalid RUIAN URL format: " + url, e);
+            }
+            
+            http.execute(new HttpGet(uri), response -> {
                 int code = response.getCode();
                 if (code != 200) throw new IOException("HTTP " + code + " from " + url);
                 try (InputStream body = response.getEntity().getContent();
