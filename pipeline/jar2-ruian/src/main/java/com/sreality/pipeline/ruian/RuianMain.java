@@ -15,14 +15,8 @@ import java.time.format.DateTimeFormatter;
 /**
  * JAR 2 entry point — RUIAN dimension loader.
  *
- * 1. Resolve best available URL (current month, or previous month if 404,
- *    or RUIAN_OVERRIDE_URL env var for manual override).
- * 2. Freshness check: skip if already loaded.
- * 3. Download + unzip RUIAN VFR XML.
- * 4. Parse kraj / okres / obec / cast_obce via StAX.
- * 5. Upsert all dimension tables (top-down FK order).
- * 6. Save snapshot date to ruian_metadata.
- * 7. Delete temp file.
+ * URL base: https://services.cuzk.gov.cz/vfr/YYYYMM/YYYYMMDD_ST_UKSG.xml.zip
+ * Walks back month by month until an available snapshot is found.
  */
 public class RuianMain {
 
@@ -34,9 +28,7 @@ public class RuianMain {
         try (PostgresConnectionPool pg = new PostgresConnectionPool()) {
             RuianLoader loader     = new RuianLoader(pg);
             LocalDate   lastLoaded = loader.getLastSnapshotDate();
-
-            // Resolve best available URL (handles month-end delays automatically)
-            String url = RuianDownloader.resolveUrl();
+            String      url        = RuianDownloader.resolveUrl();
 
             if (!RuianDownloader.isUpdateAvailable(url, lastLoaded)) {
                 log.info("RUIAN already current — nothing to do.");
@@ -51,7 +43,7 @@ public class RuianMain {
                 loader.loadObce(result.obce());
                 loader.loadCastiObci(result.castiObci());
 
-                // Parse snapshot date from URL filename: YYYYMMDD_ST_UKSG.xml.zip
+                // Parse snapshot date from filename: YYYYMMDD_ST_UKSG.xml.zip
                 String fname   = url.substring(url.lastIndexOf('/') + 1);
                 LocalDate snap = LocalDate.parse(fname.substring(0, 8),
                     DateTimeFormatter.ofPattern("yyyyMMdd"));
@@ -59,7 +51,7 @@ public class RuianMain {
 
                 log.info("RUIAN load complete: {} kraj / {} okres / {} obec / {} cast_obce",
                     result.kraje().size(), result.okresy().size(),
-                    result.obce().size(),  result.castiObci().size());
+                    result.obce().size(), result.castiObci().size());
             } finally {
                 Files.deleteIfExists(xmlFile);
                 log.info("Temp XML deleted.");

@@ -10,11 +10,20 @@ import java.nio.file.*;
 import java.util.*;
 
 /**
- * StAX streaming parser for the RUIAN VFR full-state XML export.
- * Handles files of several hundred MB without loading into memory.
+ * StAX streaming parser for the RUIAN VFR 4.x full-state XML export.
  *
- * Extracts: Kraj, Okres, Obec, CastObce.
- * CastObce coordinates are in S-JTSK → converted to WGS84 via SjtskToWgs84.
+ * VFR element name mapping (doc section 3.3):
+ *   Kraj in our schema = [Vusc]  (Vyšší územně samosprávný celek)
+ *   Okres              = [Okres] (unchanged)
+ *   Obec               = [Obec]  (unchanged)
+ *   CastObce           = [CastObce] (unchanged)
+ *
+ * FK reference field names:
+ *   Okres → Vusc:     element <VuscKod>   (NOT <KrajKod>)
+ *   Obec  → Okres:    element <OkresKod>  (unchanged)
+ *   CastObce → Obec:  element <ObecKod>   (unchanged)
+ *
+ * Coordinates in CastObce: S-JTSK <pos> element → converted to WGS84.
  */
 public class RuianVfrParser {
 
@@ -41,47 +50,65 @@ public class RuianVfrParser {
             while (r.hasNext()) {
                 if (r.next() != XMLStreamConstants.START_ELEMENT) continue;
                 switch (r.getLocalName()) {
-                    case "Kraj"     -> kraje.add(parseKraj(r));
-                    case "Okres"    -> okresy.add(parseOkres(r));
-                    case "Obec"     -> { ObecRecord o = parseObec(r); if (o != null) obce.add(o); }
+                    // "Vusc" is what VFR calls Vyšší územně samosprávný celek — maps to our dim_kraj
+                    case "Vusc"     -> { KrajRecord k = parseVusc(r);       if (k != null) kraje.add(k); }
+                    case "Okres"    -> { OkresRecord o = parseOkres(r);     if (o != null) okresy.add(o); }
+                    case "Obec"     -> { ObecRecord ob = parseObec(r);      if (ob != null) obce.add(ob); }
                     case "CastObce" -> { CastObceRecord c = parseCastObce(r); if (c != null) castiObci.add(c); }
                 }
             }
             r.close();
         }
-        log.info("Parsed: {} kraj, {} okres, {} obec, {} cast_obce",
+        log.info("Parsed: {} vusc(kraj), {} okres, {} obec, {} cast_obce",
             kraje.size(), okresy.size(), obce.size(), castiObci.size());
         return new ParseResult(kraje, okresy, obce, castiObci);
     }
 
     // -------------------------------------------------------------------------
+    // Vusc → stored as dim_kraj
+    // -------------------------------------------------------------------------
 
-    private KrajRecord parseKraj(XMLStreamReader r) throws XMLStreamException {
+    private KrajRecord parseVusc(XMLStreamReader r) throws XMLStreamException {
         String kod = null, nazev = null;
         while (r.hasNext()) {
             int ev = r.next();
             if (ev == XMLStreamConstants.START_ELEMENT) {
-                if ("Kod".equals(r.getLocalName()))   kod   = r.getElementText();
-                if ("Nazev".equals(r.getLocalName())) nazev = r.getElementText();
-            } else if (ev == XMLStreamConstants.END_ELEMENT && "Kraj".equals(r.getLocalName())) break;
+                switch (r.getLocalName()) {
+                    case "Kod"   -> kod   = r.getElementText();
+                    case "Nazev" -> nazev = r.getElementText();
+                }
+            } else if (ev == XMLStreamConstants.END_ELEMENT && "Vusc".equals(r.getLocalName())) break;
         }
+        if (kod == null) return null;
         return new KrajRecord(kod, nazev);
     }
 
+    // -------------------------------------------------------------------------
+    // Okres — references Vusc via <VuscKod>
+    // -------------------------------------------------------------------------
+
     private OkresRecord parseOkres(XMLStreamReader r) throws XMLStreamException {
-        String kod = null, nazev = null, kodKraje = null;
+        String kod = null, nazev = null, kodVusc = null;
         while (r.hasNext()) {
             int ev = r.next();
             if (ev == XMLStreamConstants.START_ELEMENT) {
                 switch (r.getLocalName()) {
-                    case "Kod"     -> kod      = r.getElementText();
-                    case "Nazev"   -> nazev    = r.getElementText();
-                    case "KrajKod" -> kodKraje = r.getElementText();
+                    case "Kod"     -> kod     = r.getElementText();
+                    case "Nazev"   -> nazev   = r.getElementText();
+                    // VFR uses VuscKod to reference the parent Vusc (our dim_kraj)
+                    case "VuscKod" -> kodVusc = r.getElementText();
+                    // Older VFR versions used KrajKod — keep as fallback
+                    case "KrajKod" -> { if (kodVusc == null) kodVusc = r.getElementText(); }
                 }
             } else if (ev == XMLStreamConstants.END_ELEMENT && "Okres".equals(r.getLocalName())) break;
         }
-        return new OkresRecord(kod, nazev, kodKraje);
+        if (kod == null) return null;
+        return new OkresRecord(kod, nazev, kodVusc);
     }
+
+    // -------------------------------------------------------------------------
+    // Obec — references Okres via <OkresKod>
+    // -------------------------------------------------------------------------
 
     private ObecRecord parseObec(XMLStreamReader r) throws XMLStreamException {
         String kod = null, nazev = null, kodOkresu = null, zaniklo = null;
@@ -100,6 +127,10 @@ public class RuianVfrParser {
         return new ObecRecord(kod, nazev, kodOkresu, zaniklo == null || zaniklo.isBlank());
     }
 
+    // -------------------------------------------------------------------------
+    // CastObce — references Obec via <ObecKod>, coordinates via <pos> in S-JTSK
+    // -------------------------------------------------------------------------
+
     private CastObceRecord parseCastObce(XMLStreamReader r) throws XMLStreamException {
         String kod = null, nazev = null, kodObce = null;
         double[] sjtsk = null;
@@ -112,10 +143,15 @@ public class RuianVfrParser {
                     case "ObecKod" -> kodObce = r.getElementText();
                     case "pos"     -> {
                         if (sjtsk == null) {
-                            String[] parts = r.getElementText().trim().split("\\s+");
+                            String raw = r.getElementText().trim();
+                            String[] parts = raw.split("\\s+");
                             if (parts.length >= 2) {
-                                try { sjtsk = new double[]{Double.parseDouble(parts[0]), Double.parseDouble(parts[1])}; }
-                                catch (NumberFormatException ignored) {}
+                                try {
+                                    sjtsk = new double[]{
+                                        Double.parseDouble(parts[0]),
+                                        Double.parseDouble(parts[1])
+                                    };
+                                } catch (NumberFormatException ignored) {}
                             }
                         }
                     }
