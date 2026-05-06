@@ -1,92 +1,239 @@
-name: Deploy to server
+name: Build & Deploy
 
 on:
   push:
     branches: [main]
 
 jobs:
-  deploy:
-    name: Pull & redeploy
+  # ===========================================================================
+  # Job 1: Build all Maven JARs on the GitHub Actions runner (free CPU/RAM)
+  #         The Hetzner server (1 CPU / 2 GB) is too constrained for Maven.
+  # ===========================================================================
+  build:
+    name: Build JARs
     runs-on: ubuntu-latest
 
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      # Install the original scraper into the local Maven repo first,
+      # because the pipeline JARs depend on it as a local artifact.
+      - name: Install original scraper
+        run: mvn install -DskipTests -q
+
+      # Build all 5 pipeline JARs
+      - name: Build pipeline JARs
+        run: |
+          cd pipeline
+          mvn package -DskipTests -q
+          bash copy_jars.sh
+
+      # Build the initial-load JAR separately
+      # (needs pipeline-shared and jar4-enricher installed into .m2 first)
+      - name: Install pipeline modules
+        run: |
+          cd pipeline
+          mvn install -DskipTests -q
+
+      - name: Build initial-load JAR
+        run: |
+          cd initial-load
+          mvn package -DskipTests -q
+
+      # Upload all JARs as a build artifact so the deploy job can download them
+      - name: Upload JARs
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-jars
+          path: |
+            pipeline/jars/jar1-scraper.jar
+            pipeline/jars/jar2-ruian.jar
+            pipeline/jars/jar3-csu.jar
+            pipeline/jars/jar4-enricher.jar
+            pipeline/jars/jar5-reporter.jar
+            initial-load/target/initial-load.jar
+          retention-days: 7
+
+  # ===========================================================================
+  # Job 2: Deploy to Hetzner server
+  #         - Downloads built JARs from Job 1
+  #         - Copies them to the server via SCP
+  #         - Pulls latest code on server
+  #         - Writes .env
+  #         - Restarts pipeline services
+  # ===========================================================================
+  deploy:
+    name: Deploy to server
+    runs-on: ubuntu-latest
+    needs: build   # only runs if build succeeded
+
     env:
-      # Secrets
-      MONGO_ROOT_USERNAME: ${{ secrets.MONGO_ROOT_USERNAME }}
-      MONGO_ROOT_PASSWORD: ${{ secrets.MONGO_ROOT_PASSWORD }}
-      MONGO_USERNAME: ${{ secrets.MONGO_USERNAME }}
-      MONGO_PASSWORD: ${{ secrets.MONGO_PASSWORD }}
-      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-      DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-      # Variables
-      MONGO_HOST: ${{ vars.MONGO_HOST }}
-      MONGO_PORT: ${{ vars.MONGO_PORT }}
-      MONGO_HOST_PORT: ${{ vars.MONGO_HOST_PORT }}
-      MONGO_DATABASE: ${{ vars.MONGO_DATABASE }}
-      SREALITY_BASE_URL: ${{ vars.SREALITY_BASE_URL }}
-      PER_PAGE: ${{ vars.PER_PAGE }}
-      MAX_ESTATES: ${{ vars.MAX_ESTATES }}
+      # ── Secrets ──────────────────────────────────────────────────────────
+      MONGO_ROOT_USERNAME:   ${{ secrets.MONGO_ROOT_USERNAME }}
+      MONGO_ROOT_PASSWORD:   ${{ secrets.MONGO_ROOT_PASSWORD }}
+      MONGO_USERNAME:        ${{ secrets.MONGO_USERNAME }}
+      MONGO_PASSWORD:        ${{ secrets.MONGO_PASSWORD }}
+      PG_USERNAME:           ${{ secrets.PG_USERNAME }}
+      PG_PASSWORD:           ${{ secrets.PG_PASSWORD }}
+      TELEGRAM_BOT_TOKEN:    ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID:      ${{ secrets.TELEGRAM_CHAT_ID }}
+      AIRFLOW_FERNET_KEY:    ${{ secrets.AIRFLOW_FERNET_KEY }}
+      AIRFLOW_SECRET_KEY:    ${{ secrets.AIRFLOW_SECRET_KEY }}
+      AIRFLOW_PASSWORD:      ${{ secrets.AIRFLOW_PASSWORD }}
+      DEPLOY_PATH:           ${{ secrets.DEPLOY_PATH }}
+      # ── Variables ────────────────────────────────────────────────────────
+      MONGO_HOST:            ${{ vars.MONGO_HOST }}
+      MONGO_PORT:            ${{ vars.MONGO_PORT }}
+      MONGO_HOST_PORT:       ${{ vars.MONGO_HOST_PORT }}
+      MONGO_DATABASE:        ${{ vars.MONGO_DATABASE }}
+      PG_HOST:               ${{ vars.PG_HOST }}
+      PG_PORT:               ${{ vars.PG_PORT }}
+      PG_HOST_PORT:          ${{ vars.PG_HOST_PORT }}
+      PG_DATABASE:           ${{ vars.PG_DATABASE }}
+      PG_SCHEMA:             ${{ vars.PG_SCHEMA }}
+      SREALITY_BASE_URL:     ${{ vars.SREALITY_BASE_URL }}
+      PER_PAGE:              ${{ vars.PER_PAGE }}
+      MAX_ESTATES:           ${{ vars.MAX_ESTATES }}
       HTTP_CONNECT_TIMEOUT_MS: ${{ vars.HTTP_CONNECT_TIMEOUT_MS }}
-      HTTP_READ_TIMEOUT_MS: ${{ vars.HTTP_READ_TIMEOUT_MS }}
-      REQUEST_DELAY_MS: ${{ vars.REQUEST_DELAY_MS }}
+      HTTP_READ_TIMEOUT_MS:  ${{ vars.HTTP_READ_TIMEOUT_MS }}
+      REQUEST_DELAY_MS:      ${{ vars.REQUEST_DELAY_MS }}
+      AIRFLOW_USER:          ${{ vars.AIRFLOW_USER }}
+      AIRFLOW_PORT:          ${{ vars.AIRFLOW_PORT }}
+      CSU_XLSX_URLS:         ${{ vars.CSU_XLSX_URLS }}
+      CSU_YEAR:              ${{ vars.CSU_YEAR }}
 
     steps:
-      - name: Write .env and redeploy via SSH
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Download the JARs built in Job 1
+      - name: Download JARs
+        uses: actions/download-artifact@v4
+        with:
+          name: pipeline-jars
+          path: built-jars
+
+      # Reconstruct the directory layout the server expects:
+      #   pipeline/jars/*.jar
+      #   initial-load/target/initial-load.jar
+      - name: Arrange JARs
+        run: |
+          mkdir -p pipeline/jars initial-load/target
+          cp built-jars/jar*.jar      pipeline/jars/
+          cp built-jars/initial-load.jar initial-load/target/
+
+      # Copy JARs to server via SCP before the SSH step
+      - name: Copy JARs to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host:     ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key:      ${{ secrets.DEPLOY_SSH_KEY }}
+          source:   "pipeline/jars/*.jar,initial-load/target/initial-load.jar"
+          target:   ${{ secrets.DEPLOY_PATH }}
+          strip_components: 0   # preserves pipeline/jars/ and initial-load/target/ paths
+
+      # SSH into server: pull code, write .env, restart services
+      - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.DEPLOY_HOST }}
+          host:     ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          # Pass all secrets/variables as env vars into the SSH session.
-          # This avoids special-character shell-interpretation issues that occur
-          # when values are substituted inline into a heredoc script.
-          envs: MONGO_HOST,MONGO_PORT,MONGO_HOST_PORT,MONGO_DATABASE,MONGO_ROOT_USERNAME,MONGO_ROOT_PASSWORD,MONGO_USERNAME,MONGO_PASSWORD,SREALITY_BASE_URL,PER_PAGE,MAX_ESTATES,HTTP_CONNECT_TIMEOUT_MS,HTTP_READ_TIMEOUT_MS,REQUEST_DELAY_MS,TELEGRAM_BOT_TOKEN,TELEGRAM_CHAT_ID,DEPLOY_PATH
+          key:      ${{ secrets.DEPLOY_SSH_KEY }}
+          envs: >-
+            MONGO_HOST,MONGO_PORT,MONGO_HOST_PORT,MONGO_DATABASE,
+            MONGO_ROOT_USERNAME,MONGO_ROOT_PASSWORD,MONGO_USERNAME,MONGO_PASSWORD,
+            PG_HOST,PG_PORT,PG_HOST_PORT,PG_DATABASE,PG_SCHEMA,PG_USERNAME,PG_PASSWORD,
+            SREALITY_BASE_URL,PER_PAGE,MAX_ESTATES,
+            HTTP_CONNECT_TIMEOUT_MS,HTTP_READ_TIMEOUT_MS,REQUEST_DELAY_MS,
+            TELEGRAM_BOT_TOKEN,TELEGRAM_CHAT_ID,
+            AIRFLOW_USER,AIRFLOW_PASSWORD,AIRFLOW_FERNET_KEY,AIRFLOW_SECRET_KEY,AIRFLOW_PORT,
+            CSU_XLSX_URLS,CSU_YEAR,
+            DEPLOY_PATH
           script: |
             set -e
             cd "$DEPLOY_PATH"
 
-            # Pull latest code
+            # Pull latest code (JARs were already copied via SCP above)
             git pull origin main
 
-            # Write .env safely — values arrive as env vars so special
-            # characters are never interpreted by the shell.
-            # Docker Compose interprets $ in .env files, so we escape
-            # $ as $ in all values to ensure they are passed through literally.
-            escape_for_dotenv() { printf '%s' "$1" | sed 's/\$/\$\$/g'; }
+            # Write .env — values arrive as env vars so special characters
+            # are never interpreted by the shell. Escape $ for docker-compose.
+            escape() { printf '%s' "$1" | sed 's/\$/\$\$/g'; }
 
             printf '%s\n' \
-              "MONGO_HOST=$(escape_for_dotenv "$MONGO_HOST")" \
-              "MONGO_PORT=$(escape_for_dotenv "$MONGO_PORT")" \
-              "MONGO_HOST_PORT=$(escape_for_dotenv "$MONGO_HOST_PORT")" \
-              "MONGO_DATABASE=$(escape_for_dotenv "$MONGO_DATABASE")" \
-              "MONGO_ROOT_USERNAME=$(escape_for_dotenv "$MONGO_ROOT_USERNAME")" \
-              "MONGO_ROOT_PASSWORD=$(escape_for_dotenv "$MONGO_ROOT_PASSWORD")" \
-              "MONGO_USERNAME=$(escape_for_dotenv "$MONGO_USERNAME")" \
-              "MONGO_PASSWORD=$(escape_for_dotenv "$MONGO_PASSWORD")" \
-              "SREALITY_BASE_URL=$(escape_for_dotenv "$SREALITY_BASE_URL")" \
-              "PER_PAGE=$(escape_for_dotenv "$PER_PAGE")" \
-              "MAX_ESTATES=$(escape_for_dotenv "$MAX_ESTATES")" \
-              "HTTP_CONNECT_TIMEOUT_MS=$(escape_for_dotenv "$HTTP_CONNECT_TIMEOUT_MS")" \
-              "HTTP_READ_TIMEOUT_MS=$(escape_for_dotenv "$HTTP_READ_TIMEOUT_MS")" \
-              "REQUEST_DELAY_MS=$(escape_for_dotenv "$REQUEST_DELAY_MS")" \
-              "TELEGRAM_BOT_TOKEN=$(escape_for_dotenv "$TELEGRAM_BOT_TOKEN")" \
-              "TELEGRAM_CHAT_ID=$(escape_for_dotenv "$TELEGRAM_CHAT_ID")" \
+              "MONGO_HOST=$(escape "$MONGO_HOST")" \
+              "MONGO_PORT=$(escape "$MONGO_PORT")" \
+              "MONGO_HOST_PORT=$(escape "$MONGO_HOST_PORT")" \
+              "MONGO_DATABASE=$(escape "$MONGO_DATABASE")" \
+              "MONGO_ROOT_USERNAME=$(escape "$MONGO_ROOT_USERNAME")" \
+              "MONGO_ROOT_PASSWORD=$(escape "$MONGO_ROOT_PASSWORD")" \
+              "MONGO_USERNAME=$(escape "$MONGO_USERNAME")" \
+              "MONGO_PASSWORD=$(escape "$MONGO_PASSWORD")" \
+              "PG_HOST=$(escape "$PG_HOST")" \
+              "PG_PORT=$(escape "$PG_PORT")" \
+              "PG_HOST_PORT=$(escape "$PG_HOST_PORT")" \
+              "PG_DATABASE=$(escape "$PG_DATABASE")" \
+              "PG_SCHEMA=$(escape "$PG_SCHEMA")" \
+              "PG_USERNAME=$(escape "$PG_USERNAME")" \
+              "PG_PASSWORD=$(escape "$PG_PASSWORD")" \
+              "SREALITY_BASE_URL=$(escape "$SREALITY_BASE_URL")" \
+              "PER_PAGE=$(escape "$PER_PAGE")" \
+              "MAX_ESTATES=$(escape "$MAX_ESTATES")" \
+              "HTTP_CONNECT_TIMEOUT_MS=$(escape "$HTTP_CONNECT_TIMEOUT_MS")" \
+              "HTTP_READ_TIMEOUT_MS=$(escape "$HTTP_READ_TIMEOUT_MS")" \
+              "REQUEST_DELAY_MS=$(escape "$REQUEST_DELAY_MS")" \
+              "TELEGRAM_BOT_TOKEN=$(escape "$TELEGRAM_BOT_TOKEN")" \
+              "TELEGRAM_CHAT_ID=$(escape "$TELEGRAM_CHAT_ID")" \
+              "AIRFLOW_USER=$(escape "$AIRFLOW_USER")" \
+              "AIRFLOW_PASSWORD=$(escape "$AIRFLOW_PASSWORD")" \
+              "AIRFLOW_FERNET_KEY=$(escape "$AIRFLOW_FERNET_KEY")" \
+              "AIRFLOW_SECRET_KEY=$(escape "$AIRFLOW_SECRET_KEY")" \
+              "AIRFLOW_PORT=$(escape "$AIRFLOW_PORT")" \
+              "CSU_XLSX_URLS=$(escape "$CSU_XLSX_URLS")" \
+              "CSU_YEAR=$(escape "$CSU_YEAR")" \
               > .env
 
-            # Rebuild scraper image and ensure MongoDB is up
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+            # ── Original scraper (MongoDB only) ──────────────────────────
+            docker compose -f docker-compose.yml \
               build --no-cache scraper
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+            docker compose -f docker-compose.yml \
               up -d mongodb
+
+            # ── Pipeline services (Postgres + Airflow) ───────────────────
+            # Build the custom Airflow image (Java 21 JRE layer)
+            docker compose -f docker-compose.yml -f docker-compose.pipeline.yml \
+              build --no-cache airflow-webserver airflow-scheduler airflow-init
+
+            # Start / restart Postgres (schema applied automatically on first start)
+            docker compose -f docker-compose.yml -f docker-compose.pipeline.yml \
+              up -d postgres
+
+            # Initialise Airflow DB and admin user (idempotent — safe to re-run)
+            docker compose -f docker-compose.yml -f docker-compose.pipeline.yml \
+              run --rm airflow-init
+
+            # Start / restart Airflow services
+            docker compose -f docker-compose.yml -f docker-compose.pipeline.yml \
+              up -d airflow-webserver airflow-scheduler
 
       - name: Notify Telegram
         if: always()
         run: |
           STATUS="${{ job.status }}"
-          COMMIT="${{ github.sha }}"
-          SHORT="${COMMIT:0:7}"
-          MSG="sreality_scraper deploy: *${STATUS}* on \`${SHORT}\` by ${{ github.actor }}"
-          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+          SHORT="${{ github.sha }}"
+          SHORT="${SHORT:0:7}"
+          MSG="sreality deploy: *${STATUS}* on \`${SHORT}\` by ${{ github.actor }}"
+          curl -s -X POST \
+            "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
             -d parse_mode="Markdown" \
             -d text="${MSG}"

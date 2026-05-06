@@ -16,3 +16,8 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+
+# Pipeline JARs — built by GitHub Actions, copied to server via SCP
+# The jars/ directory itself is tracked (via .gitkeep) but not the JARs
+pipeline/jars/*.jar
+initial-load/target/
