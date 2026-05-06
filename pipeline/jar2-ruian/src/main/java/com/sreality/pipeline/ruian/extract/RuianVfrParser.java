@@ -47,7 +47,20 @@ public class RuianVfrParser {
             while (r.hasNext()) {
                 if (r.next() != XMLStreamConstants.START_ELEMENT) continue;
                 switch (r.getLocalName()) {
-                    case "Vusc"     -> { KrajRecord k     = parseVusc(r);      if (k  != null) kraje.add(k); }
+                    case "Vusc"     -> {
+                        // <vf:Vusc> is a container; individual kraje are <vci:Vusc> children
+                        while (r.hasNext()) {
+                            int ev = r.next();
+                            if (ev == XMLStreamConstants.END_ELEMENT) break;
+                            if (ev != XMLStreamConstants.START_ELEMENT) continue;
+                            if ("Vusc".equals(r.getLocalName())) {
+                                KrajRecord k = parseVusc(r);
+                                if (k != null) kraje.add(k);
+                            } else {
+                                skipElement(r);
+                            }
+                        }
+                    }
                     case "Okres"    -> { OkresRecord o    = parseOkres(r);     if (o  != null) okresy.add(o); }
                     case "Obec"     -> { ObecRecord ob    = parseObec(r);      if (ob != null) obce.add(ob); }
                     case "CastObce" -> { CastObceRecord c = parseCastObce(r);  if (c  != null) castiObci.add(c); }
