@@ -6,8 +6,7 @@ on:
 
 jobs:
   # ===========================================================================
-  # Job 1: Build all Maven JARs on the GitHub Actions runner (free CPU/RAM)
-  #         The Hetzner server (1 CPU / 2 GB) is too constrained for Maven.
+  # Job 1: Build all Maven JARs on the GitHub Actions runner
   # ===========================================================================
   build:
     name: Build JARs
@@ -24,21 +23,16 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      # Install the original scraper into the local Maven repo first,
-      # because the pipeline JARs depend on it as a local artifact.
       - name: Install original scraper
         run: mvn install -DskipTests -q
 
-      # Build all 5 pipeline JARs
       - name: Build pipeline JARs
         run: |
           cd pipeline
           mvn package -DskipTests -q
           bash copy_jars.sh
 
-      # Build the initial-load JAR separately
-      # (needs pipeline-shared and jar4-enricher installed into .m2 first)
-      - name: Install pipeline modules
+      - name: Install pipeline modules into local .m2
         run: |
           cd pipeline
           mvn install -DskipTests -q
@@ -48,100 +42,114 @@ jobs:
           cd initial-load
           mvn package -DskipTests -q
 
-      # Upload all JARs as a build artifact so the deploy job can download them
-      - name: Upload JARs
+      # Stage all JARs into one flat directory — avoids path confusion in download
+      - name: Stage JARs for upload
+        run: |
+          mkdir -p staging/pipeline-jars
+          mkdir -p staging/initial-load
+          cp pipeline/jars/jar1-scraper.jar   staging/pipeline-jars/
+          cp pipeline/jars/jar2-ruian.jar     staging/pipeline-jars/
+          cp pipeline/jars/jar3-csu.jar       staging/pipeline-jars/
+          cp pipeline/jars/jar4-enricher.jar  staging/pipeline-jars/
+          cp pipeline/jars/jar5-reporter.jar  staging/pipeline-jars/
+          cp initial-load/target/initial-load.jar staging/initial-load/
+
+      - name: Upload pipeline JARs
         uses: actions/upload-artifact@v4
         with:
           name: pipeline-jars
-          path: |
-            pipeline/jars/jar1-scraper.jar
-            pipeline/jars/jar2-ruian.jar
-            pipeline/jars/jar3-csu.jar
-            pipeline/jars/jar4-enricher.jar
-            pipeline/jars/jar5-reporter.jar
-            initial-load/target/initial-load.jar
+          path: staging/pipeline-jars/
+          retention-days: 7
+
+      - name: Upload initial-load JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: initial-load-jar
+          path: staging/initial-load/
           retention-days: 7
 
   # ===========================================================================
   # Job 2: Deploy to Hetzner server
-  #         - Downloads built JARs from Job 1
-  #         - Copies them to the server via SCP
-  #         - Pulls latest code on server
-  #         - Writes .env
-  #         - Restarts pipeline services
   # ===========================================================================
   deploy:
     name: Deploy to server
     runs-on: ubuntu-latest
-    needs: build   # only runs if build succeeded
+    needs: build
 
     env:
-      # ── Secrets ──────────────────────────────────────────────────────────
-      MONGO_ROOT_USERNAME:   ${{ secrets.MONGO_ROOT_USERNAME }}
-      MONGO_ROOT_PASSWORD:   ${{ secrets.MONGO_ROOT_PASSWORD }}
-      MONGO_USERNAME:        ${{ secrets.MONGO_USERNAME }}
-      MONGO_PASSWORD:        ${{ secrets.MONGO_PASSWORD }}
-      PG_USERNAME:           ${{ secrets.PG_USERNAME }}
-      PG_PASSWORD:           ${{ secrets.PG_PASSWORD }}
-      TELEGRAM_BOT_TOKEN:    ${{ secrets.TELEGRAM_BOT_TOKEN }}
-      TELEGRAM_CHAT_ID:      ${{ secrets.TELEGRAM_CHAT_ID }}
-      AIRFLOW_FERNET_KEY:    ${{ secrets.AIRFLOW_FERNET_KEY }}
-      AIRFLOW_SECRET_KEY:    ${{ secrets.AIRFLOW_SECRET_KEY }}
-      AIRFLOW_PASSWORD:      ${{ secrets.AIRFLOW_PASSWORD }}
-      DEPLOY_PATH:           ${{ secrets.DEPLOY_PATH }}
-      # ── Variables ────────────────────────────────────────────────────────
-      MONGO_HOST:            ${{ vars.MONGO_HOST }}
-      MONGO_PORT:            ${{ vars.MONGO_PORT }}
-      MONGO_HOST_PORT:       ${{ vars.MONGO_HOST_PORT }}
-      MONGO_DATABASE:        ${{ vars.MONGO_DATABASE }}
-      PG_HOST:               ${{ vars.PG_HOST }}
-      PG_PORT:               ${{ vars.PG_PORT }}
-      PG_HOST_PORT:          ${{ vars.PG_HOST_PORT }}
-      PG_DATABASE:           ${{ vars.PG_DATABASE }}
-      PG_SCHEMA:             ${{ vars.PG_SCHEMA }}
-      SREALITY_BASE_URL:     ${{ vars.SREALITY_BASE_URL }}
-      PER_PAGE:              ${{ vars.PER_PAGE }}
-      MAX_ESTATES:           ${{ vars.MAX_ESTATES }}
+      MONGO_ROOT_USERNAME:     ${{ secrets.MONGO_ROOT_USERNAME }}
+      MONGO_ROOT_PASSWORD:     ${{ secrets.MONGO_ROOT_PASSWORD }}
+      MONGO_USERNAME:          ${{ secrets.MONGO_USERNAME }}
+      MONGO_PASSWORD:          ${{ secrets.MONGO_PASSWORD }}
+      PG_USERNAME:             ${{ secrets.PG_USERNAME }}
+      PG_PASSWORD:             ${{ secrets.PG_PASSWORD }}
+      TELEGRAM_BOT_TOKEN:      ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID:        ${{ secrets.TELEGRAM_CHAT_ID }}
+      AIRFLOW_FERNET_KEY:      ${{ secrets.AIRFLOW_FERNET_KEY }}
+      AIRFLOW_SECRET_KEY:      ${{ secrets.AIRFLOW_SECRET_KEY }}
+      AIRFLOW_PASSWORD:        ${{ secrets.AIRFLOW_PASSWORD }}
+      DEPLOY_PATH:             ${{ secrets.DEPLOY_PATH }}
+      MONGO_HOST:              ${{ vars.MONGO_HOST }}
+      MONGO_PORT:              ${{ vars.MONGO_PORT }}
+      MONGO_HOST_PORT:         ${{ vars.MONGO_HOST_PORT }}
+      MONGO_DATABASE:          ${{ vars.MONGO_DATABASE }}
+      PG_HOST:                 ${{ vars.PG_HOST }}
+      PG_PORT:                 ${{ vars.PG_PORT }}
+      PG_HOST_PORT:            ${{ vars.PG_HOST_PORT }}
+      PG_DATABASE:             ${{ vars.PG_DATABASE }}
+      PG_SCHEMA:               ${{ vars.PG_SCHEMA }}
+      SREALITY_BASE_URL:       ${{ vars.SREALITY_BASE_URL }}
+      PER_PAGE:                ${{ vars.PER_PAGE }}
+      MAX_ESTATES:             ${{ vars.MAX_ESTATES }}
       HTTP_CONNECT_TIMEOUT_MS: ${{ vars.HTTP_CONNECT_TIMEOUT_MS }}
-      HTTP_READ_TIMEOUT_MS:  ${{ vars.HTTP_READ_TIMEOUT_MS }}
-      REQUEST_DELAY_MS:      ${{ vars.REQUEST_DELAY_MS }}
-      AIRFLOW_USER:          ${{ vars.AIRFLOW_USER }}
-      AIRFLOW_PORT:          ${{ vars.AIRFLOW_PORT }}
-      CSU_XLSX_URLS:         ${{ vars.CSU_XLSX_URLS }}
-      CSU_YEAR:              ${{ vars.CSU_YEAR }}
+      HTTP_READ_TIMEOUT_MS:    ${{ vars.HTTP_READ_TIMEOUT_MS }}
+      REQUEST_DELAY_MS:        ${{ vars.REQUEST_DELAY_MS }}
+      AIRFLOW_USER:            ${{ vars.AIRFLOW_USER }}
+      AIRFLOW_PORT:            ${{ vars.AIRFLOW_PORT }}
+      CSU_XLSX_URLS:           ${{ vars.CSU_XLSX_URLS }}
+      CSU_YEAR:                ${{ vars.CSU_YEAR }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Download the JARs built in Job 1
-      - name: Download JARs
+      - name: Download pipeline JARs
         uses: actions/download-artifact@v4
         with:
           name: pipeline-jars
-          path: built-jars
+          path: pipeline/jars/
 
-      # Reconstruct the directory layout the server expects:
-      #   pipeline/jars/*.jar
-      #   initial-load/target/initial-load.jar
-      - name: Arrange JARs
+      - name: Download initial-load JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: initial-load-jar
+          path: initial-load/target/
+
+      - name: Verify JARs exist
         run: |
-          mkdir -p pipeline/jars initial-load/target
-          cp built-jars/jar*.jar      pipeline/jars/
-          cp built-jars/initial-load.jar initial-load/target/
+          echo "Pipeline JARs:"
+          ls -lh pipeline/jars/
+          echo "Initial-load JAR:"
+          ls -lh initial-load/target/
 
-      # Copy JARs to server via SCP before the SSH step
-      - name: Copy JARs to server
+      - name: Copy pipeline JARs to server
         uses: appleboy/scp-action@v0.1.7
         with:
           host:     ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key:      ${{ secrets.DEPLOY_SSH_KEY }}
-          source:   "pipeline/jars/*.jar,initial-load/target/initial-load.jar"
+          source:   "pipeline/jars/"
           target:   ${{ secrets.DEPLOY_PATH }}
-          strip_components: 0   # preserves pipeline/jars/ and initial-load/target/ paths
 
-      # SSH into server: pull code, write .env, restart services
+      - name: Copy initial-load JAR to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host:     ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key:      ${{ secrets.DEPLOY_SSH_KEY }}
+          source:   "initial-load/target/initial-load.jar"
+          target:   ${{ secrets.DEPLOY_PATH }}/initial-load/target/
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -162,11 +170,8 @@ jobs:
             set -e
             cd "$DEPLOY_PATH"
 
-            # Pull latest code (JARs were already copied via SCP above)
             git pull origin main
 
-            # Write .env — values arrive as env vars so special characters
-            # are never interpreted by the shell. Escape $ for docker-compose.
             escape() { printf '%s' "$1" | sed 's/\$/\$\$/g'; }
 
             printf '%s\n' \
@@ -202,26 +207,17 @@ jobs:
               "CSU_YEAR=$(escape "$CSU_YEAR")" \
               > .env
 
-            # ── Original scraper (MongoDB only) ──────────────────────────
-            docker compose -f docker-compose.yml \
-              build --no-cache scraper
-            docker compose -f docker-compose.yml \
-              up -d mongodb
+            # Original scraper + MongoDB
+            docker compose -f docker-compose.yml build --no-cache scraper
+            docker compose -f docker-compose.yml up -d mongodb
 
-            # ── Pipeline services (Postgres + Airflow) ───────────────────
-            # Build the custom Airflow image (Java 21 JRE layer)
+            # Pipeline: Postgres + Airflow
             docker compose -f docker-compose.yml -f docker-compose.pipeline.yml \
               build --no-cache airflow-webserver airflow-scheduler airflow-init
-
-            # Start / restart Postgres (schema applied automatically on first start)
             docker compose -f docker-compose.yml -f docker-compose.pipeline.yml \
               up -d postgres
-
-            # Initialise Airflow DB and admin user (idempotent — safe to re-run)
             docker compose -f docker-compose.yml -f docker-compose.pipeline.yml \
               run --rm airflow-init
-
-            # Start / restart Airflow services
             docker compose -f docker-compose.yml -f docker-compose.pipeline.yml \
               up -d airflow-webserver airflow-scheduler
 
