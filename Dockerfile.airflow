@@ -1,19 +1,26 @@
 # Dockerfile.airflow
-# Custom Airflow image with Java 21 (JRE only) for running pipeline JARs.
-# Built once: docker build -f Dockerfile.airflow -t sreality-airflow .
+# Custom Airflow image with Java 21 JRE for running pipeline JARs.
+# Uses Eclipse Temurin (Adoptium) — the standard cross-platform OpenJDK distribution.
+# Works on both AMD64 and ARM64.
 
 FROM apache/airflow:2.9.3-python3.11
 
 USER root
 
-# Install Java 21 JRE (headless — no GUI, minimal footprint)
+# Add Adoptium (Temurin) apt repository and install Java 21 JRE
 RUN apt-get update \
- && apt-get install -y --no-install-recommends \
-      openjdk-21-jre-headless \
+ && apt-get install -y --no-install-recommends wget gnupg apt-transport-https \
+ && wget -qO /usr/share/keyrings/adoptium.gpg \
+      https://packages.adoptium.net/artifactory/api/gpg/key/public \
+ && echo "deb [signed-by=/usr/share/keyrings/adoptium.gpg] \
+      https://packages.adoptium.net/artifactory/deb bookworm main" \
+      > /etc/apt/sources.list.d/adoptium.list \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends temurin-21-jre \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
 
-ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
-ENV PATH="$JAVA_HOME/bin:$PATH"
+# Verify java is on PATH (Temurin installs to /usr/bin/java via update-alternatives)
+RUN java -version
 
 USER airflow
