@@ -131,7 +131,7 @@ jobs:
           echo "Initial-load JAR:"
           ls -lh initial-load/target/
 
-      # Step 1: reset local state, then pull
+      # Step 1: reset local state, then pull, then write .env
       - name: Pull code and write .env
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -152,51 +152,48 @@ jobs:
             set -e
             cd "$DEPLOY_PATH"
 
-            # Discard any local modifications to tracked files (e.g. docker-compose.pipeline.yml
-            # edited manually on the server, or partially written by a previous failed deploy).
-            git checkout -- .
-
-            # Remove untracked files that SCP may have placed before this step
-            # (scoped to JAR directories only — never touches mongo-data or anything else).
+            # Discard local modifications and untracked JAR files before pulling
             git checkout -- .
             git clean -fd pipeline/jars/ initial-load/target/ || true
-
             git pull origin main
 
-            escape() { printf '%s' "$1" | sed 's/\$/\$\$/g'; }
-
-            printf '%s\n' \
-              "MONGO_HOST=$(escape "$MONGO_HOST")" \
-              "MONGO_PORT=$(escape "$MONGO_PORT")" \
-              "MONGO_HOST_PORT=$(escape "$MONGO_HOST_PORT")" \
-              "MONGO_DATABASE=$(escape "$MONGO_DATABASE")" \
-              "MONGO_ROOT_USERNAME=$(escape "$MONGO_ROOT_USERNAME")" \
-              "MONGO_ROOT_PASSWORD=$(escape "$MONGO_ROOT_PASSWORD")" \
-              "MONGO_USERNAME=$(escape "$MONGO_USERNAME")" \
-              "MONGO_PASSWORD=$(escape "$MONGO_PASSWORD")" \
-              "PG_HOST=$(escape "$PG_HOST")" \
-              "PG_PORT=$(escape "$PG_PORT")" \
-              "PG_HOST_PORT=$(escape "$PG_HOST_PORT")" \
-              "PG_DATABASE=$(escape "$PG_DATABASE")" \
-              "PG_SCHEMA=$(escape "$PG_SCHEMA")" \
-              "PG_USERNAME=$(escape "$PG_USERNAME")" \
-              "PG_PASSWORD=$(escape "$PG_PASSWORD")" \
-              "SREALITY_BASE_URL=$(escape "$SREALITY_BASE_URL")" \
-              "PER_PAGE=$(escape "$PER_PAGE")" \
-              "MAX_ESTATES=$(escape "$MAX_ESTATES")" \
-              "HTTP_CONNECT_TIMEOUT_MS=$(escape "$HTTP_CONNECT_TIMEOUT_MS")" \
-              "HTTP_READ_TIMEOUT_MS=$(escape "$HTTP_READ_TIMEOUT_MS")" \
-              "REQUEST_DELAY_MS=$(escape "$REQUEST_DELAY_MS")" \
-              "TELEGRAM_BOT_TOKEN=$(escape "$TELEGRAM_BOT_TOKEN")" \
-              "TELEGRAM_CHAT_ID=$(escape "$TELEGRAM_CHAT_ID")" \
-              "AIRFLOW_USER=$(escape "$AIRFLOW_USER")" \
-              "AIRFLOW_PASSWORD=$(escape "$AIRFLOW_PASSWORD")" \
-              "AIRFLOW_FERNET_KEY=$(escape "$AIRFLOW_FERNET_KEY")" \
-              "AIRFLOW_SECRET_KEY=$(escape "$AIRFLOW_SECRET_KEY")" \
-              "AIRFLOW_PORT=$(escape "$AIRFLOW_PORT")" \
-              "CSU_XLSX_URLS=$(escape "$CSU_XLSX_URLS")" \
-              "CSU_YEAR=$(escape "$CSU_YEAR")" \
-              > .env
+            # Write .env with all values single-quoted so special characters
+            # (@, %, *, spaces, etc.) are passed through literally.
+            # Docker Compose strips the surrounding single quotes correctly.
+            # Note: single quotes cannot appear inside single-quoted values —
+            # passwords must not contain literal ' characters.
+            cat > .env << ENVEOF
+            MONGO_HOST='${MONGO_HOST}'
+            MONGO_PORT='${MONGO_PORT}'
+            MONGO_HOST_PORT='${MONGO_HOST_PORT}'
+            MONGO_DATABASE='${MONGO_DATABASE}'
+            MONGO_ROOT_USERNAME='${MONGO_ROOT_USERNAME}'
+            MONGO_ROOT_PASSWORD='${MONGO_ROOT_PASSWORD}'
+            MONGO_USERNAME='${MONGO_USERNAME}'
+            MONGO_PASSWORD='${MONGO_PASSWORD}'
+            PG_HOST='${PG_HOST}'
+            PG_PORT='${PG_PORT}'
+            PG_HOST_PORT='${PG_HOST_PORT}'
+            PG_DATABASE='${PG_DATABASE}'
+            PG_SCHEMA='${PG_SCHEMA}'
+            PG_USERNAME='${PG_USERNAME}'
+            PG_PASSWORD='${PG_PASSWORD}'
+            SREALITY_BASE_URL='${SREALITY_BASE_URL}'
+            PER_PAGE='${PER_PAGE}'
+            MAX_ESTATES='${MAX_ESTATES}'
+            HTTP_CONNECT_TIMEOUT_MS='${HTTP_CONNECT_TIMEOUT_MS}'
+            HTTP_READ_TIMEOUT_MS='${HTTP_READ_TIMEOUT_MS}'
+            REQUEST_DELAY_MS='${REQUEST_DELAY_MS}'
+            TELEGRAM_BOT_TOKEN='${TELEGRAM_BOT_TOKEN}'
+            TELEGRAM_CHAT_ID='${TELEGRAM_CHAT_ID}'
+            AIRFLOW_USER='${AIRFLOW_USER}'
+            AIRFLOW_PASSWORD='${AIRFLOW_PASSWORD}'
+            AIRFLOW_FERNET_KEY='${AIRFLOW_FERNET_KEY}'
+            AIRFLOW_SECRET_KEY='${AIRFLOW_SECRET_KEY}'
+            AIRFLOW_PORT='${AIRFLOW_PORT}'
+            CSU_XLSX_URLS='${CSU_XLSX_URLS}'
+            CSU_YEAR='${CSU_YEAR}'
+            ENVEOF
 
       # Step 2: SCP JARs after git pull
       - name: Copy pipeline JARs to server

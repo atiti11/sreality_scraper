@@ -8,7 +8,7 @@
 #   bash run-jar.sh jar3-csu
 #   bash run-jar.sh jar4-enricher
 #   bash run-jar.sh jar5-reporter
-#   bash run-jar.sh initial-load     ← uses initial-load/target/initial-load.jar
+#   bash run-jar.sh initial-load
 #
 # Optional env overrides:
 #   INITIAL_LOAD_DRY_RUN=true bash run-jar.sh initial-load
@@ -32,15 +32,38 @@ else
   EXTRA_MOUNT=""
 fi
 
-# Load .env if it exists
-ENV_FILE="$DIR/.env"
-ENV_ARGS=""
-if [[ -f "$ENV_FILE" ]]; then
-  # Pass each non-comment, non-empty line as --env
-  while IFS= read -r line; do
-    [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
-    ENV_ARGS="$ENV_ARGS --env $line"
-  done < "$ENV_FILE"
+# Build a temporary env file for docker --env-file
+# This correctly handles passwords with special characters (@, %, *, etc.)
+# by passing them as-is without any shell interpretation.
+TMPENV=$(mktemp)
+trap "rm -f $TMPENV" EXIT
+
+# Always override these so the JAR uses container names, not localhost
+cat > "$TMPENV" << ENVEOF
+PG_HOST=postgres
+PG_PORT=5432
+MONGO_HOST=mongodb
+MONGO_PORT=27017
+ENVEOF
+
+# Append all other vars from .env, skipping comments and empty lines,
+# but NOT overwriting the host/port overrides above
+if [[ -f "$DIR/.env" ]]; then
+  grep -v '^\s*#' "$DIR/.env" \
+    | grep -v '^\s*$' \
+    | grep -v '^PG_HOST=' \
+    | grep -v '^PG_PORT=' \
+    | grep -v '^MONGO_HOST=' \
+    | grep -v '^MONGO_PORT=' \
+    >> "$TMPENV"
+fi
+
+# Pass any extra env vars from the calling shell (e.g. INITIAL_LOAD_DRY_RUN)
+if [[ -n "${INITIAL_LOAD_DRY_RUN:-}" ]]; then
+  echo "INITIAL_LOAD_DRY_RUN=$INITIAL_LOAD_DRY_RUN" >> "$TMPENV"
+fi
+if [[ -n "${CSU_MODE:-}" ]]; then
+  echo "CSU_MODE=$CSU_MODE" >> "$TMPENV"
 fi
 
 echo "=== Running $JAR_NAME ==="
@@ -48,12 +71,8 @@ echo "=== Running $JAR_NAME ==="
 # shellcheck disable=SC2086
 docker run --rm \
   --network scraper-shared-net \
-  --env PG_HOST=postgres \
-  --env PG_PORT=5432 \
-  --env MONGO_HOST=mongodb \
-  --env MONGO_PORT=27017 \
-  $ENV_ARGS \
-  ${EXTRA_MOUNT} \
+  --env-file "$TMPENV" \
+  $EXTRA_MOUNT \
   -v "$DIR/pipeline/jars:/jars:ro" \
   eclipse-temurin:21-jre \
   java -Xmx512m -jar "$JAR_PATH"
