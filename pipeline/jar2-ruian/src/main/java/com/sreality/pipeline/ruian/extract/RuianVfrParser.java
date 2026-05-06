@@ -12,22 +12,49 @@ import java.util.*;
 /**
  * StAX streaming parser for the RUIAN VFR 4.x full-state XML export.
  *
- * The XML uses namespaced, nested elements for FK references. Example:
+ * XML structure (namespace-prefixed, FK codes nested):
+ *
+ *   <vf:Vusc>
+ *     <vci:Kod>35</vci:Kod>
+ *     <vci:Nazev>Jihočeský kraj</vci:Nazev>
+ *   </vf:Vusc>
  *
  *   <vf:Okres gml:id="OK.3306">
  *     <oki:Kod>3306</oki:Kod>
  *     <oki:Nazev>Prachatice</oki:Nazev>
  *     <oki:Vusc>
- *       <vci:Kod>35</vci:Kod>     ← Vusc FK nested one level deep
+ *       <vci:Kod>35</vci:Kod>      ← FK to dim_kraj
  *     </oki:Vusc>
- *     ...
  *   </vf:Okres>
  *
- * Strategy: when parsing an entity, track which "container" element we are
- * currently inside (e.g. "Vusc", "Okres", "Obec"), and when we see a <Kod>
- * element, assign it to the right field based on that context.
+ *   <vf:Obec>
+ *     <obi:Kod>500011</obi:Kod>
+ *     <obi:Nazev>Adamov</obi:Nazev>
+ *     <obi:Okres>
+ *       <oki:Kod>3201</oki:Kod>    ← FK to dim_okres
+ *     </obi:Okres>
+ *   </vf:Obec>
  *
- * All comparisons use getLocalName() (no namespace prefix).
+ *   <vf:CastObce>
+ *     <coi:Kod>400001</coi:Kod>
+ *     <coi:Nazev>Adamov</coi:Nazev>
+ *     <coi:Obec>
+ *       <obi:Kod>500011</obi:Kod>  ← FK to dim_obec
+ *     </coi:Obec>
+ *     <coi:Geometrie>
+ *       <coi:DefinicniBod>
+ *         <gml:Point ...>
+ *           <gml:pos>-123456.00 -456789.00</gml:pos>
+ *         </gml:Point>
+ *       </coi:DefinicniBod>
+ *     </coi:Geometrie>
+ *   </vf:CastObce>
+ *
+ * Key implementation note:
+ *   All element comparisons use getLocalName() (strips namespace prefix).
+ *   FK codes are inside named container elements — we track depth/context
+ *   with a simple string variable rather than booleans to avoid the
+ *   "break inside switch only breaks switch" trap.
  */
 public class RuianVfrParser {
 
@@ -54,10 +81,10 @@ public class RuianVfrParser {
             while (r.hasNext()) {
                 if (r.next() != XMLStreamConstants.START_ELEMENT) continue;
                 switch (r.getLocalName()) {
-                    case "Vusc"     -> { KrajRecord k     = parseVusc(r);     if (k  != null) kraje.add(k); }
-                    case "Okres"    -> { OkresRecord o     = parseOkres(r);    if (o  != null) okresy.add(o); }
-                    case "Obec"     -> { ObecRecord ob     = parseObec(r);     if (ob != null) obce.add(ob); }
-                    case "CastObce" -> { CastObceRecord c  = parseCastObce(r); if (c  != null) castiObci.add(c); }
+                    case "Vusc"     -> { KrajRecord k    = parseVusc(r);     if (k  != null) kraje.add(k); }
+                    case "Okres"    -> { OkresRecord o   = parseOkres(r);    if (o  != null) okresy.add(o); }
+                    case "Obec"     -> { ObecRecord ob   = parseObec(r);     if (ob != null) obce.add(ob); }
+                    case "CastObce" -> { CastObceRecord c = parseCastObce(r); if (c != null) castiObci.add(c); }
                 }
             }
             r.close();
@@ -68,49 +95,60 @@ public class RuianVfrParser {
     }
 
     // =========================================================================
-    // Vusc (= our dim_kraj)
+    // Vusc → dim_kraj
     // =========================================================================
-
     private KrajRecord parseVusc(XMLStreamReader r) throws XMLStreamException {
         String kod = null, nazev = null;
-        while (r.hasNext()) {
+        int depth = 1;
+        while (r.hasNext() && depth > 0) {
             int ev = r.next();
-            if (ev == XMLStreamConstants.START_ELEMENT && "Kod".equals(r.getLocalName()) && kod == null)
-                kod = r.getElementText();
-            else if (ev == XMLStreamConstants.START_ELEMENT && "Nazev".equals(r.getLocalName()) && nazev == null)
-                nazev = r.getElementText();
-            else if (ev == XMLStreamConstants.END_ELEMENT && "Vusc".equals(r.getLocalName())) break;
+            if (ev == XMLStreamConstants.START_ELEMENT) {
+                depth++;
+                String local = r.getLocalName();
+                if ("Kod".equals(local) && kod == null) {
+                    kod = r.getElementText(); depth--; // getElementText consumes END_ELEMENT
+                } else if ("Nazev".equals(local) && nazev == null) {
+                    nazev = r.getElementText(); depth--;
+                }
+            } else if (ev == XMLStreamConstants.END_ELEMENT) {
+                depth--;
+            }
         }
         if (kod == null) return null;
         return new KrajRecord(kod, nazev);
     }
 
     // =========================================================================
-    // Okres — FK to Vusc nested inside <oki:Vusc><vci:Kod>...</vci:Kod></oki:Vusc>
+    // Okres → dim_okres, FK to Vusc
     // =========================================================================
-
     private OkresRecord parseOkres(XMLStreamReader r) throws XMLStreamException {
         String kod = null, nazev = null, kodVusc = null;
-        boolean insideVusc = false;
+        // context = name of the container element we are currently inside
+        // e.g. "Vusc" when inside <oki:Vusc>...</oki:Vusc>
+        String context = null;
+        int depth = 1;
 
-        while (r.hasNext()) {
+        while (r.hasNext() && depth > 0) {
             int ev = r.next();
             if (ev == XMLStreamConstants.START_ELEMENT) {
-                switch (r.getLocalName()) {
-                    case "Vusc"  -> insideVusc = true;
-                    case "Kod"   -> {
-                        String val = r.getElementText();
-                        if (insideVusc) kodVusc = val;      // FK to Vusc
-                        else if (kod == null) kod = val;    // own Kod
+                depth++;
+                String local = r.getLocalName();
+                if ("Vusc".equals(local)) {
+                    context = "Vusc";
+                } else if ("Kod".equals(local)) {
+                    String val = r.getElementText(); depth--;
+                    if ("Vusc".equals(context)) {
+                        kodVusc = val;
+                    } else if (kod == null) {
+                        kod = val;
                     }
-                    case "Nazev" -> { if (nazev == null) nazev = r.getElementText(); }
+                } else if ("Nazev".equals(local) && nazev == null && context == null) {
+                    nazev = r.getElementText(); depth--;
                 }
             } else if (ev == XMLStreamConstants.END_ELEMENT) {
-                switch (r.getLocalName()) {
-                    case "Vusc"  -> insideVusc = false;
-                    case "Okres" -> { break; }
-                }
-                if ("Okres".equals(r.getLocalName())) break;
+                depth--;
+                String local = r.getLocalName();
+                if ("Vusc".equals(local)) context = null;
             }
         }
         if (kod == null) return null;
@@ -118,29 +156,35 @@ public class RuianVfrParser {
     }
 
     // =========================================================================
-    // Obec — FK to Okres nested inside <obi:Okres><oki:Kod>...</oki:Kod></obi:Okres>
+    // Obec → dim_obec, FK to Okres
     // =========================================================================
-
     private ObecRecord parseObec(XMLStreamReader r) throws XMLStreamException {
         String kod = null, nazev = null, kodOkresu = null, zaniklo = null;
-        boolean insideOkres = false;
+        String context = null;
+        int depth = 1;
 
-        while (r.hasNext()) {
+        while (r.hasNext() && depth > 0) {
             int ev = r.next();
             if (ev == XMLStreamConstants.START_ELEMENT) {
-                switch (r.getLocalName()) {
-                    case "Okres"    -> insideOkres = true;
-                    case "Kod"      -> {
-                        String val = r.getElementText();
-                        if (insideOkres) kodOkresu = val;
-                        else if (kod == null) kod = val;
+                depth++;
+                String local = r.getLocalName();
+                if ("Okres".equals(local)) {
+                    context = "Okres";
+                } else if ("Kod".equals(local)) {
+                    String val = r.getElementText(); depth--;
+                    if ("Okres".equals(context)) {
+                        kodOkresu = val;
+                    } else if (kod == null) {
+                        kod = val;
                     }
-                    case "Nazev"    -> { if (nazev == null) nazev = r.getElementText(); }
-                    case "ZanikloOd"-> zaniklo = r.getElementText();
+                } else if ("Nazev".equals(local) && nazev == null && context == null) {
+                    nazev = r.getElementText(); depth--;
+                } else if ("ZanikloOd".equals(local)) {
+                    zaniklo = r.getElementText(); depth--;
                 }
             } else if (ev == XMLStreamConstants.END_ELEMENT) {
-                if ("Okres".equals(r.getLocalName())) insideOkres = false;
-                if ("Obec".equals(r.getLocalName())) break;
+                depth--;
+                if ("Okres".equals(r.getLocalName())) context = null;
             }
         }
         if (kod == null) return null;
@@ -148,56 +192,56 @@ public class RuianVfrParser {
     }
 
     // =========================================================================
-    // CastObce — FK to Obec nested inside <coi:Obec><obi:Kod>...</obi:Kod></coi:Obec>
-    // Coordinates in DefinicniBod/Point/pos in S-JTSK
+    // CastObce → dim_cast_obce, FK to Obec, coordinates from DefinicniBod
     // =========================================================================
-
     private CastObceRecord parseCastObce(XMLStreamReader r) throws XMLStreamException {
         String kod = null, nazev = null, kodObce = null;
         double[] sjtsk = null;
-        boolean insideObec = false;
+        String context = null;
         boolean insideDefinicniBod = false;
+        int depth = 1;
 
-        while (r.hasNext()) {
+        while (r.hasNext() && depth > 0) {
             int ev = r.next();
             if (ev == XMLStreamConstants.START_ELEMENT) {
-                switch (r.getLocalName()) {
-                    case "Obec"         -> insideObec = true;
-                    case "DefinicniBod" -> insideDefinicniBod = true;
-                    case "Kod"          -> {
-                        String val = r.getElementText();
-                        if (insideObec) kodObce = val;
-                        else if (kod == null) kod = val;
+                depth++;
+                String local = r.getLocalName();
+                if ("Obec".equals(local)) {
+                    context = "Obec";
+                } else if ("DefinicniBod".equals(local)) {
+                    insideDefinicniBod = true;
+                } else if ("Kod".equals(local)) {
+                    String val = r.getElementText(); depth--;
+                    if ("Obec".equals(context)) {
+                        kodObce = val;
+                    } else if (kod == null) {
+                        kod = val;
                     }
-                    case "Nazev"        -> { if (nazev == null) nazev = r.getElementText(); }
-                    case "pos"          -> {
-                        // Only take the DefinicniBod point, not polygon coordinates
-                        if (insideDefinicniBod && sjtsk == null) {
-                            String raw = r.getElementText().trim();
-                            String[] parts = raw.split("\\s+");
-                            if (parts.length >= 2) {
-                                try {
-                                    sjtsk = new double[]{
-                                        Double.parseDouble(parts[0]),
-                                        Double.parseDouble(parts[1])
-                                    };
-                                } catch (NumberFormatException ignored) {}
-                            }
-                        } else {
-                            // consume other pos elements to keep parser state clean
-                            r.getElementText();
+                } else if ("Nazev".equals(local) && nazev == null && context == null) {
+                    nazev = r.getElementText(); depth--;
+                } else if ("pos".equals(local)) {
+                    String raw = r.getElementText(); depth--;
+                    // Only use the DefinicniBod point — not polygon boundary coordinates
+                    if (insideDefinicniBod && sjtsk == null) {
+                        String[] parts = raw.trim().split("\\s+");
+                        if (parts.length >= 2) {
+                            try {
+                                sjtsk = new double[]{
+                                    Double.parseDouble(parts[0]),
+                                    Double.parseDouble(parts[1])
+                                };
+                            } catch (NumberFormatException ignored) {}
                         }
                     }
                 }
             } else if (ev == XMLStreamConstants.END_ELEMENT) {
-                switch (r.getLocalName()) {
-                    case "Obec"         -> insideObec = false;
-                    case "DefinicniBod" -> insideDefinicniBod = false;
-                    case "CastObce"     -> { break; }
-                }
-                if ("CastObce".equals(r.getLocalName())) break;
+                depth--;
+                String local = r.getLocalName();
+                if ("Obec".equals(local))         context = null;
+                if ("DefinicniBod".equals(local)) insideDefinicniBod = false;
             }
         }
+
         if (kod == null || sjtsk == null) return null;
         double[] wgs = SjtskToWgs84.convert(sjtsk[0], sjtsk[1]);
         return CastObceRecord.fromCentroid(kod, nazev, kodObce, wgs[0], wgs[1]);

@@ -1,0 +1,23 @@
+<configuration>
+
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d{HH:mm:ss} [%-5level] %logger{30} — %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <!-- Pipeline code: INFO and above -->
+  <logger name="com.sreality" level="INFO"/>
+
+  <!-- Suppress HikariCP connection pool chatter -->
+  <logger name="com.zaxxer.hikari"              level="WARN"/>
+
+  <!-- Suppress Apache HTTP client wire/header/protocol debug logs -->
+  <logger name="org.apache.hc"                  level="WARN"/>
+  <logger name="org.apache.hc.client5.http.wire" level="OFF"/>
+
+  <root level="WARN">
+    <appender-ref ref="CONSOLE"/>
+  </root>
+
+</configuration>
