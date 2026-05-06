@@ -131,7 +131,7 @@ jobs:
           echo "Initial-load JAR:"
           ls -lh initial-load/target/
 
-      # Step 1: clean untracked files left by previous SCP runs, then pull
+      # Step 1: reset local state, then pull
       - name: Pull code and write .env
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -152,10 +152,13 @@ jobs:
             set -e
             cd "$DEPLOY_PATH"
 
-            # Remove any untracked files that previous SCP runs may have placed
-            # in directories git now wants to manage (e.g. pipeline/jars/.gitkeep).
-            # --force removes untracked files, -d removes untracked directories.
-            # The paths are scoped so we never accidentally wipe anything else.
+            # Discard any local modifications to tracked files (e.g. docker-compose.pipeline.yml
+            # edited manually on the server, or partially written by a previous failed deploy).
+            git checkout -- .
+
+            # Remove untracked files that SCP may have placed before this step
+            # (scoped to JAR directories only — never touches mongo-data or anything else).
+            git checkout -- .
             git clean -fd pipeline/jars/ initial-load/target/ || true
 
             git pull origin main
