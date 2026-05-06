@@ -11,9 +11,19 @@ import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.Date;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
+import java.sql.Types;
 import java.time.LocalDate;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Writes enriched estate data from a MongoDB staging document into Postgres.
@@ -42,31 +52,9 @@ public class EnricherLoader {
     // Protected hooks — override in subclasses to change SCD behaviour
     // =========================================================================
 
-    /**
-     * Date to use as valid_from for new fact rows.
-     * Default: today. InitialEnricher overrides to use _first_seen_at.
-     */
-    protected LocalDate resolveValidFrom(Document doc) {
-        return LocalDate.now();
-    }
-
-    /**
-     * Date to use as valid_to for new fact rows, or null for an open row.
-     * Default: null (all rows written by regular enricher are current/open).
-     * InitialEnricher overrides to close rows for inactive estates.
-     */
-    protected LocalDate resolveValidTo(Document doc) {
-        return null;
-    }
-
-    /**
-     * Value to store in is_active column.
-     * Default: true (regular enricher only processes active estates).
-     * InitialEnricher overrides to read from MongoDB "active" field.
-     */
-    protected boolean resolveIsActive(Document doc) {
-        return true;
-    }
+    protected LocalDate resolveValidFrom(Document doc) { return LocalDate.now(); }
+    protected LocalDate resolveValidTo  (Document doc) { return null; }
+    protected boolean   resolveIsActive (Document doc) { return true; }
 
     // =========================================================================
     // Public API
@@ -83,25 +71,15 @@ public class EnricherLoader {
                 return WriteResult.ERROR;
             }
 
-            long   hashId = getLong(doc, "hash_id");
-            String table  = TableRouter.factTable(propertyType, dealType);
+            long      hashId      = getLong(doc, "hash_id");
+            String    table       = TableRouter.factTable(propertyType, dealType);
+            GeoResult geo         = spatial.resolve(getDouble(doc, "gps_lat"), getDouble(doc, "gps_lon"));
+            Integer   agencyId    = upsertAgency(doc);
+            long      contentHash = computeFullHash(doc);
+            Long      existingHash = getCurrentHash(table, hashId);
 
-            // 1. Spatial join
-            GeoResult geo = spatial.resolve(getDouble(doc, "gps_lat"), getDouble(doc, "gps_lon"));
+            if (existingHash != null && existingHash == contentHash) return WriteResult.SKIPPED;
 
-            // 2. Agency
-            Integer agencyId = upsertAgency(doc);
-
-            // 3. Full content hash
-            long contentHash = computeFullHash(doc);
-
-            // 4. Compare with current Postgres row — skip if identical
-            Long existingHash = getCurrentHash(table, hashId);
-            if (existingHash != null && existingHash == contentHash) {
-                return WriteResult.SKIPPED;
-            }
-
-            // 5. SCD Type 2 — resolve dates via hooks
             LocalDate validFrom = resolveValidFrom(doc);
             LocalDate validTo   = resolveValidTo(doc);
             boolean   isActive  = resolveIsActive(doc);
@@ -115,16 +93,12 @@ public class EnricherLoader {
             insertFactRow(table, propertyType, dealType, doc,
                 hashId, contentHash, geo, agencyId, validFrom, validTo, isActive);
 
-            // 6. Field changes
             if (existingHash != null) {
-                Map<String, String> newValues = extractTrackedFields(doc);
-                List<FieldChange>   changes   = FieldDiff.diff(oldValues, newValues);
+                List<FieldChange> changes = FieldDiff.diff(oldValues, extractTrackedFields(doc));
                 if (!changes.isEmpty()) recordFieldChanges(hashId, table, validFrom, changes);
             }
 
-            // 7. Detail text
             upsertDetail(hashId, doc);
-
             return existingHash == null ? WriteResult.INSERTED : WriteResult.UPDATED;
 
         } catch (Exception e) {
@@ -144,31 +118,20 @@ public class EnricherLoader {
             parseArea(str(doc, "area_plocha_pozemku")),
             parseArea(str(doc, "area_zahrada")),
             str(doc, "sub_category"),
-            joinLabels(doc),
-            joinBooleans(doc)
+            join(str(doc,"ownership_label"), str(doc,"building_type_label"),
+                 str(doc,"building_condition_label"), energyLabel(doc)),
+            join(bool(doc,"has_balcony"),  bool(doc,"has_terrace"),  bool(doc,"has_loggia"),
+                 bool(doc,"has_cellar"),   bool(doc,"has_elevator"), bool(doc,"has_parking"),
+                 bool(doc,"has_garage"),   bool(doc,"has_pool"),     bool(doc,"is_barrier_free"),
+                 bool(doc,"is_low_energy"),bool(doc,"is_furnished"), bool(doc,"is_new"))
         );
     }
 
     private static String parseArea(String raw) {
         if (raw == null) return null;
-        return raw.replace(" m²", "").replace(" m2", "").trim();
+        return raw.replace(" m²","").replace(" m2","").trim();
     }
 
-    private static String joinLabels(Document doc) {
-        return join(str(doc,"ownership_label"), str(doc,"building_type_label"),
-                    str(doc,"building_condition_label"), energyLabel(doc));
-    }
-
-    private static String joinBooleans(Document doc) {
-        return join(bool(doc,"has_balcony"), bool(doc,"has_terrace"),
-                    bool(doc,"has_loggia"),  bool(doc,"has_cellar"),
-                    bool(doc,"has_elevator"),bool(doc,"has_parking"),
-                    bool(doc,"has_garage"),  bool(doc,"has_pool"),
-                    bool(doc,"is_barrier_free"),bool(doc,"is_low_energy"),
-                    bool(doc,"is_furnished"),bool(doc,"is_new"));
-    }
-
-    /** English energy label (from recommendations_data) preferred over Czech (from items[]). */
     private static String energyLabel(Document doc) {
         String en = str(doc, "energy_efficiency_label");
         return en != null ? en : str(doc, "energy_rating_label");
@@ -215,7 +178,7 @@ public class EnricherLoader {
     }
 
     // =========================================================================
-    // Fact row insert — dispatches to type-specific builder
+    // Fact row insert dispatcher
     // =========================================================================
 
     private void insertFactRow(String table, String propertyType, String dealType,
@@ -237,7 +200,7 @@ public class EnricherLoader {
                                   Integer agencyId, LocalDate validFrom, LocalDate validTo,
                                   boolean isActive) throws SQLException {
         boolean hasPerM2 = !dealType.equalsIgnoreCase("auction");
-        String priceCol  = switch (dealType.toLowerCase()) {
+        String priceCol = switch (dealType.toLowerCase()) {
             case "rent"    -> "price_monthly_czk,price_monthly_per_m2";
             case "auction" -> "price_starting_bid_czk";
             default        -> "price_asked_czk,price_asked_per_m2";
@@ -264,16 +227,11 @@ public class EnricherLoader {
             ps.setString(i++, str(doc, "building_type_label"));
             ps.setString(i++, str(doc, "building_condition_label"));
             ps.setString(i++, energyLabel(doc));
-            setBoolOrNull(ps, i++, doc, "is_new");
-            setBoolOrNull(ps, i++, doc, "is_furnished");
-            setBoolOrNull(ps, i++, doc, "has_balcony");
-            setBoolOrNull(ps, i++, doc, "has_terrace");
-            setBoolOrNull(ps, i++, doc, "has_loggia");
-            setBoolOrNull(ps, i++, doc, "has_cellar");
-            setBoolOrNull(ps, i++, doc, "has_elevator");
-            setBoolOrNull(ps, i++, doc, "has_parking");
-            setBoolOrNull(ps, i++, doc, "has_garage");
-            setBoolOrNull(ps, i++, doc, "is_barrier_free");
+            setBoolOrNull(ps, i++, doc, "is_new");        setBoolOrNull(ps, i++, doc, "is_furnished");
+            setBoolOrNull(ps, i++, doc, "has_balcony");   setBoolOrNull(ps, i++, doc, "has_terrace");
+            setBoolOrNull(ps, i++, doc, "has_loggia");    setBoolOrNull(ps, i++, doc, "has_cellar");
+            setBoolOrNull(ps, i++, doc, "has_elevator");  setBoolOrNull(ps, i++, doc, "has_parking");
+            setBoolOrNull(ps, i++, doc, "has_garage");    setBoolOrNull(ps, i++, doc, "is_barrier_free");
             ps.execute();
         }
     }
@@ -283,7 +241,7 @@ public class EnricherLoader {
                               Integer agencyId, LocalDate validFrom, LocalDate validTo,
                               boolean isActive) throws SQLException {
         boolean hasPerM2 = !dealType.equalsIgnoreCase("auction");
-        String priceCol  = switch (dealType.toLowerCase()) {
+        String priceCol = switch (dealType.toLowerCase()) {
             case "rent"    -> "price_monthly_czk,price_monthly_per_m2";
             case "auction" -> "price_starting_bid_czk";
             default        -> "price_asked_czk,price_asked_per_m2";
@@ -309,16 +267,11 @@ public class EnricherLoader {
             ps.setString(i++, str(doc, "building_type_label"));
             ps.setString(i++, str(doc, "building_condition_label"));
             ps.setString(i++, energyLabel(doc));
-            setBoolOrNull(ps, i++, doc, "is_new");
-            setBoolOrNull(ps, i++, doc, "is_low_energy");
-            setBoolOrNull(ps, i++, doc, "is_furnished");
-            setBoolOrNull(ps, i++, doc, "has_terrace");
-            setBoolOrNull(ps, i++, doc, "has_balcony");
-            setBoolOrNull(ps, i++, doc, "has_cellar");
-            setBoolOrNull(ps, i++, doc, "has_garage");
-            setBoolOrNull(ps, i++, doc, "has_parking");
-            setBoolOrNull(ps, i++, doc, "has_pool");
-            setBoolOrNull(ps, i++, doc, "is_barrier_free");
+            setBoolOrNull(ps, i++, doc, "is_new");        setBoolOrNull(ps, i++, doc, "is_low_energy");
+            setBoolOrNull(ps, i++, doc, "is_furnished");  setBoolOrNull(ps, i++, doc, "has_terrace");
+            setBoolOrNull(ps, i++, doc, "has_balcony");   setBoolOrNull(ps, i++, doc, "has_cellar");
+            setBoolOrNull(ps, i++, doc, "has_garage");    setBoolOrNull(ps, i++, doc, "has_parking");
+            setBoolOrNull(ps, i++, doc, "has_pool");      setBoolOrNull(ps, i++, doc, "is_barrier_free");
             ps.execute();
         }
     }
@@ -328,7 +281,7 @@ public class EnricherLoader {
                              Integer agencyId, LocalDate validFrom, LocalDate validTo,
                              boolean isActive) throws SQLException {
         boolean hasPerM2 = dealType.equalsIgnoreCase("sale");
-        String priceCol  = switch (dealType.toLowerCase()) {
+        String priceCol = switch (dealType.toLowerCase()) {
             case "rent"    -> "price_monthly_czk";
             case "auction" -> "price_starting_bid_czk";
             default        -> "price_asked_czk,price_asked_per_m2";
@@ -338,8 +291,7 @@ public class EnricherLoader {
             + "  gps_lat,gps_lon,is_active,first_seen_date,sreality_url,advert_images_count,has_floor_plan,has_video,"
             + "  " + priceCol + ",sub_category,plot_area_m2)"
             + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,"
-            + (hasPerM2 ? "?,?," : "?,")
-            + "  ?,?)";
+            + (hasPerM2 ? "?,?," : "?,") + "  ?,?)";
         try (Connection c = pg.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             int i = setCommon(ps, 1, doc, hashId, contentHash, geo, agencyId, validFrom, validTo, isActive);
             i = setPrice(ps, i, doc, dealType);
@@ -354,7 +306,7 @@ public class EnricherLoader {
                                    Integer agencyId, LocalDate validFrom, LocalDate validTo,
                                    boolean isActive) throws SQLException {
         boolean hasPerM2 = !dealType.equalsIgnoreCase("auction");
-        String priceCol  = switch (dealType.toLowerCase()) {
+        String priceCol = switch (dealType.toLowerCase()) {
             case "rent"    -> "price_monthly_czk,price_monthly_per_m2";
             case "auction" -> "price_starting_bid_czk";
             default        -> "price_asked_czk,price_asked_per_m2";
@@ -366,8 +318,7 @@ public class EnricherLoader {
             + "  usable_area_m2,floor_area_m2,building_condition_label,energy_rating_label,"
             + "  has_elevator,has_parking,is_barrier_free)"
             + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,"
-            + (hasPerM2 ? "?,?," : "?,")
-            + "  ?,?,?,?,?,?,?)";
+            + (hasPerM2 ? "?,?," : "?,") + "  ?,?,?,?,?,?,?)";
         try (Connection c = pg.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             int i = setCommon(ps, 1, doc, hashId, contentHash, geo, agencyId, validFrom, validTo, isActive);
             i = setPrice(ps, i, doc, dealType);
@@ -402,7 +353,7 @@ public class EnricherLoader {
     }
 
     // =========================================================================
-    // Common setter — 16 shared columns, now takes validFrom/validTo/isActive
+    // Common setter
     // =========================================================================
 
     private int setCommon(PreparedStatement ps, int start, Document doc,
@@ -443,14 +394,11 @@ public class EnricherLoader {
             throws SQLException {
         long    price   = getLong(doc, "price_czk_value");
         Integer areaSqm = getUsableArea(doc);
-        switch (dealType.toLowerCase()) {
-            case "auction" -> {
-                if (price == 0) ps.setNull(i++, Types.BIGINT); else ps.setLong(i++, price);
-            }
-            default -> {  // sale or rent — both have per_m2
-                if (price == 0) ps.setNull(i++, Types.BIGINT); else ps.setLong(i++, price);
-                setDoubleOrNull(ps, i++, computePricePerM2(price, areaSqm));
-            }
+        if (dealType.equalsIgnoreCase("auction")) {
+            if (price == 0) ps.setNull(i++, Types.BIGINT); else ps.setLong(i++, price);
+        } else {
+            if (price == 0) ps.setNull(i++, Types.BIGINT); else ps.setLong(i++, price);
+            setDoubleOrNull(ps, i++, computePricePerM2(price, areaSqm));
         }
         return i;
     }
@@ -493,25 +441,25 @@ public class EnricherLoader {
         putStr(m, "usable_area_m2",         getUsableArea(doc));
         putStr(m, "plot_area_m2",           parseAreaDouble(str(doc, "area_plocha_pozemku")));
         putStr(m, "garden_area_m2",         parseAreaDouble(str(doc, "area_zahrada")));
-        m.put("sub_category",              str(doc, "sub_category"));
-        m.put("ownership_label",           str(doc, "ownership_label"));
-        m.put("building_type_label",       str(doc, "building_type_label"));
-        m.put("building_condition_label",  str(doc, "building_condition_label"));
-        m.put("energy_rating_label",       energyLabel(doc));
-        m.put("is_new_building",           bool(doc, "is_new"));
-        m.put("is_low_energy",             bool(doc, "is_low_energy"));
-        m.put("is_furnished",              bool(doc, "is_furnished"));
-        m.put("is_barrier_free",           bool(doc, "is_barrier_free"));
-        m.put("has_balcony",               bool(doc, "has_balcony"));
-        m.put("has_terrace",               bool(doc, "has_terrace"));
-        m.put("has_loggia",                bool(doc, "has_loggia"));
-        m.put("has_cellar",                bool(doc, "has_cellar"));
-        m.put("has_elevator",              bool(doc, "has_elevator"));
-        m.put("has_parking",               bool(doc, "has_parking"));
-        m.put("has_garage",                bool(doc, "has_garage"));
-        m.put("has_pool",                  bool(doc, "has_pool"));
-        putStr(m, "floor_number",          getFloorNumber(doc));
-        putStr(m, "total_floors",          getTotalFloors(doc));
+        m.put("sub_category",             str(doc, "sub_category"));
+        m.put("ownership_label",          str(doc, "ownership_label"));
+        m.put("building_type_label",      str(doc, "building_type_label"));
+        m.put("building_condition_label", str(doc, "building_condition_label"));
+        m.put("energy_rating_label",      energyLabel(doc));
+        m.put("is_new_building",          bool(doc, "is_new"));
+        m.put("is_low_energy",            bool(doc, "is_low_energy"));
+        m.put("is_furnished",             bool(doc, "is_furnished"));
+        m.put("is_barrier_free",          bool(doc, "is_barrier_free"));
+        m.put("has_balcony",              bool(doc, "has_balcony"));
+        m.put("has_terrace",              bool(doc, "has_terrace"));
+        m.put("has_loggia",               bool(doc, "has_loggia"));
+        m.put("has_cellar",               bool(doc, "has_cellar"));
+        m.put("has_elevator",             bool(doc, "has_elevator"));
+        m.put("has_parking",              bool(doc, "has_parking"));
+        m.put("has_garage",               bool(doc, "has_garage"));
+        m.put("has_pool",                 bool(doc, "has_pool"));
+        putStr(m, "floor_number", getFloorNumber(doc));
+        putStr(m, "total_floors", getTotalFloors(doc));
         return m;
     }
 
@@ -523,12 +471,16 @@ public class EnricherLoader {
         try (Connection c = pg.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             c.setAutoCommit(false);
             for (FieldChange ch : changes) {
-                ps.setLong(1, hashId); ps.setString(2, tableName);
+                ps.setLong(1, hashId);
+                ps.setString(2, tableName);
                 ps.setDate(3, Date.valueOf(changedAt));
-                ps.setString(4, ch.fieldName()); ps.setString(5, ch.oldValue()); ps.setString(6, ch.newValue());
+                ps.setString(4, ch.fieldName());
+                ps.setString(5, ch.oldValue());
+                ps.setString(6, ch.newValue());
                 ps.addBatch();
             }
-            ps.executeBatch(); c.commit();
+            ps.executeBatch();
+            c.commit();
         }
     }
 
@@ -539,9 +491,10 @@ public class EnricherLoader {
     private void upsertDetail(long hashId, Document doc) throws SQLException {
         String sql = "INSERT INTO " + pg.t("estate_detail")
                    + " (hash_id,description,locality_full,scraped_at) VALUES (?,?,?,now())"
-                   + " ON CONFLICT (hash_id) DO UPDATE"
-                   + "   SET description=EXCLUDED.description,"
-                   + "       locality_full=EXCLUDED.locality_full,scraped_at=EXCLUDED.scraped_at";
+                   + " ON CONFLICT (hash_id) DO UPDATE SET"
+                   + "   description=EXCLUDED.description,"
+                   + "   locality_full=EXCLUDED.locality_full,"
+                   + "   scraped_at=EXCLUDED.scraped_at";
         try (Connection c = pg.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setLong(1, hashId);
             ps.setString(2, str(doc, "description"));
@@ -551,7 +504,7 @@ public class EnricherLoader {
     }
 
     // =========================================================================
-    // Field extraction
+    // Field extraction helpers
     // =========================================================================
 
     private static Integer getUsableArea(Document doc) {
@@ -570,7 +523,10 @@ public class EnricherLoader {
         String fd = str(doc, "detail_podlazi");
         if (fd != null) {
             String d = fd.replaceAll("[^0-9]","");
-            if (!d.isEmpty()) try { return Integer.parseInt(d.substring(0,1)); } catch (NumberFormatException ignored) {}
+            if (!d.isEmpty()) {
+                try { return Integer.parseInt(d.substring(0,1)); }
+                catch (NumberFormatException ignored) {}
+            }
         }
         return null;
     }
@@ -578,10 +534,14 @@ public class EnricherLoader {
     private static Integer getTotalFloors(Document doc) {
         String fc = str(doc, "count_podlazi_z_celkem");
         if (fc != null && fc.contains("/")) {
-            try { return Integer.parseInt(fc.split("/")[1].trim()); } catch (NumberFormatException ignored) {}
+            try { return Integer.parseInt(fc.split("/")[1].trim()); }
+            catch (NumberFormatException ignored) {}
         }
         String fd = str(doc, "detail_pocet_podlazi");
-        if (fd != null) { try { return Integer.parseInt(fd.trim()); } catch (NumberFormatException ignored) {} }
+        if (fd != null) {
+            try { return Integer.parseInt(fd.trim()); }
+            catch (NumberFormatException ignored) {}
+        }
         return null;
     }
 
@@ -592,7 +552,8 @@ public class EnricherLoader {
     }
 
     private static Integer parseAreaInt(String raw) {
-        Double d = parseAreaDouble(raw); return d == null ? null : d.intValue();
+        Double d = parseAreaDouble(raw);
+        return d == null ? null : d.intValue();
     }
 
     // =========================================================================
@@ -602,16 +563,21 @@ public class EnricherLoader {
     private static void setIntOrNull(PreparedStatement ps, int col, Integer v) throws SQLException {
         if (v == null) ps.setNull(col, Types.INTEGER); else ps.setInt(col, v);
     }
+
     private static void setDoubleOrNull(PreparedStatement ps, int col, Double v) throws SQLException {
         if (v == null) ps.setNull(col, Types.NUMERIC); else ps.setDouble(col, v);
     }
-    private static void setBoolOrNull(PreparedStatement ps, int col, Document doc, String field) throws SQLException {
+
+    private static void setBoolOrNull(PreparedStatement ps, int col, Document doc, String field)
+            throws SQLException {
         Object v = doc.get(field);
-        if (v == null) ps.setNull(col, Types.BOOLEAN);
+        if (v == null)               ps.setNull(col, Types.BOOLEAN);
         else if (v instanceof Boolean b) ps.setBoolean(col, b);
-        else ps.setBoolean(col, Boolean.parseBoolean(v.toString()));
+        else                         ps.setBoolean(col, Boolean.parseBoolean(v.toString()));
     }
-    private static void setFirstSeenDate(PreparedStatement ps, int col, Document doc) throws SQLException {
+
+    private static void setFirstSeenDate(PreparedStatement ps, int col, Document doc)
+            throws SQLException {
         String ts = str(doc, "_first_seen_at");
         if (ts == null || ts.length() < 10) { ps.setNull(col, Types.DATE); return; }
         try { ps.setDate(col, Date.valueOf(ts.substring(0, 10))); }
@@ -625,37 +591,50 @@ public class EnricherLoader {
     protected static String str(Document doc, String key) {
         Object v = doc.get(key); return v == null ? null : v.toString();
     }
+
     private static String bool(Document doc, String key) {
         Object v = doc.get(key); return v == null ? null : v.toString();
     }
+
     protected static long getLong(Document doc, String key) {
         Object v = doc.get(key);
         if (v instanceof Long l)    return l;
         if (v instanceof Integer i) return i;
-        if (v instanceof String s)  { try { return Long.parseLong(s); } catch (NumberFormatException e) { return 0L; } }
+        if (v instanceof String s)  {
+            try { return Long.parseLong(s); } catch (NumberFormatException e) { return 0L; }
+        }
         return 0L;
     }
+
     protected static double getDouble(Document doc, String key) {
         Object v = doc.get(key);
         if (v instanceof Double d)  return d;
         if (v instanceof Float f)   return f;
         if (v instanceof Integer i) return i;
         if (v instanceof Long l)    return l;
-        if (v instanceof String s)  { try { return Double.parseDouble(s); } catch (NumberFormatException e) { return 0; } }
+        if (v instanceof String s)  {
+            try { return Double.parseDouble(s); } catch (NumberFormatException e) { return 0; }
+        }
         return 0;
     }
+
     private static int intVal(Document doc, String key, int def) {
         Object v = doc.get(key);
         if (v instanceof Integer i) return i;
         if (v instanceof Long l)    return l.intValue();
         return def;
     }
+
     private static String join(String... parts) {
-        return String.join("|", Arrays.stream(parts).map(s -> s == null ? "null" : s).toArray(String[]::new));
+        return String.join("|", Arrays.stream(parts)
+            .map(s -> s == null ? "null" : s)
+            .toArray(String[]::new));
     }
+
     private static void putStr(Map<String, String> m, String key, Object v) {
         m.put(key, v == null ? null : v.toString());
     }
+
     private static boolean isInfraColumn(String col) {
         return switch (col) {
             case "id","hash_id","content_hash","valid_from","valid_to",
