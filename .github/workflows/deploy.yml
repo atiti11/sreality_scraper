@@ -212,7 +212,7 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key:      ${{ secrets.DEPLOY_SSH_KEY }}
           source:   "initial-load/target/initial-load.jar"
-          target:   ${{ secrets.DEPLOY_PATH }}/initial-load/target/
+          target:   ${{ secrets.DEPLOY_PATH }}
 
       # Step 3: restart Docker services
       - name: Restart services
