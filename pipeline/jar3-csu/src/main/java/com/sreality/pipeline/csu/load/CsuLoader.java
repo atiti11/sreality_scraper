@@ -63,17 +63,20 @@ public class CsuLoader {
         String resolveSuccSql    = "SELECT o.id FROM " + pg.t("dim_obec") + " o"
                                  + " JOIN " + pg.t("obec_successor") + " s ON s.new_obec_kod=o.kod_obce"
                                  + " WHERE s.old_obec_kod=?";
+        // COALESCE keeps existing non-null values so the two CSU ZIPs
+        // (demographics + weddings) can be loaded in either order without
+        // one overwriting the other's columns with NULLs.
         String upsertSql         = "INSERT INTO " + pg.t("fact_obec_stats")
                                  + " (obec_id,year,population,births,deaths,migration_balance,marriages,divorces,unemployment_pct)"
                                  + " VALUES (?,?,?,?,?,?,?,?,?)"
                                  + " ON CONFLICT (obec_id,year) DO UPDATE SET"
-                                 + "   population=EXCLUDED.population,"
-                                 + "   births=EXCLUDED.births,"
-                                 + "   deaths=EXCLUDED.deaths,"
-                                 + "   migration_balance=EXCLUDED.migration_balance,"
-                                 + "   marriages=EXCLUDED.marriages,"
-                                 + "   divorces=EXCLUDED.divorces,"
-                                 + "   unemployment_pct=EXCLUDED.unemployment_pct";
+                                 + "   population=COALESCE(EXCLUDED.population,fact_obec_stats.population),"
+                                 + "   births=COALESCE(EXCLUDED.births,fact_obec_stats.births),"
+                                 + "   deaths=COALESCE(EXCLUDED.deaths,fact_obec_stats.deaths),"
+                                 + "   migration_balance=COALESCE(EXCLUDED.migration_balance,fact_obec_stats.migration_balance),"
+                                 + "   marriages=COALESCE(EXCLUDED.marriages,fact_obec_stats.marriages),"
+                                 + "   divorces=COALESCE(EXCLUDED.divorces,fact_obec_stats.divorces),"
+                                 + "   unemployment_pct=COALESCE(EXCLUDED.unemployment_pct,fact_obec_stats.unemployment_pct)";
 
         int ok = 0, resolved = 0, skipped = 0;
         try (Connection c = pg.getConnection();

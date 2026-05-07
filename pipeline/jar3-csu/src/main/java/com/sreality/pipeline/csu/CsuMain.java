@@ -64,7 +64,7 @@ public class CsuMain {
             if (!localFiles.isBlank()) {
                 // ── Local file mode (pre-downloaded by curl) ──────────────────
                 String[] paths = localFiles.split(",");
-                log.info("Reading {} local XLSX file(s)", paths.length);
+                log.info("Reading {} local file(s)", paths.length);
                 for (String rawPath : paths) {
                     String path = rawPath.trim();
                     if (path.isBlank()) continue;
@@ -73,10 +73,10 @@ public class CsuMain {
                         log.warn("Local file not found, skipping: {}", path);
                         continue;
                     }
-                    log.info("Parsing local file: {} ({} KB)",
-                        path, Files.size(p) / 1024);
+                    log.info("Parsing local file: {} ({} KB)", path, Files.size(p) / 1024);
                     try (InputStream is = Files.newInputStream(p)) {
-                        ParseResult result = parser.parse(is, year);
+                        ParseResult result = path.toLowerCase().endsWith(".zip")
+                                ? parser.parseZip(is) : parser.parseXlsx(is);
                         allSuccessors.addAll(result.successors());
                         allStats.addAll(result.stats());
                     }
@@ -84,18 +84,20 @@ public class CsuMain {
             } else {
                 // ── URL mode (download via HTTP) ──────────────────────────────
                 String[] urlList = urls.split(",");
-                log.info("Downloading {} XLSX file(s) via HTTP", urlList.length);
+                log.info("Downloading {} file(s) via HTTP", urlList.length);
                 for (String rawUrl : urlList) {
                     String url = rawUrl.trim();
                     if (url.isBlank()) continue;
                     log.info("Downloading {}", url);
+                    boolean isZip = url.toLowerCase().contains(".zip");
                     try (CloseableHttpClient http = HttpClients.createDefault()) {
                         http.execute(new HttpGet(URI.create(url)), response -> {
                             if (response.getCode() != 200)
                                 throw new RuntimeException(
                                     "HTTP " + response.getCode() + " from " + url);
                             try (InputStream body = response.getEntity().getContent()) {
-                                ParseResult result = parser.parse(body, year);
+                                ParseResult result = isZip
+                                        ? parser.parseZip(body) : parser.parseXlsx(body);
                                 allSuccessors.addAll(result.successors());
                                 allStats.addAll(result.stats());
                             }

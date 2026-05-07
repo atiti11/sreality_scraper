@@ -7,172 +7,169 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.List;
+import java.io.*;
+import java.util.*;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 /**
- * Parses CSU municipality statistics XLSX files.
+ * Parses CSU municipality statistics from ZIP archives or single XLSX files.
  *
- * Each XLSX (one per kraj, e.g. CZ020A.xlsx) contains:
- *   - Sheet "OD_KAM": municipality succession table
- *     Columns (0-based): old_obec_kod, old_name, new_obec_kod, new_name, year
+ * CSU distributes two ZIPs, each containing 77 XLSX files (one per okres).
+ * The sheet type is auto-detected from the header row (col 3):
  *
- *   - Data sheets (one or more): yearly statistics per obec
- *     Row 0: headers including year
- *     Column 0: obec_kod
- *     Remaining columns: stat values (population, births, deaths, ...)
+ *   Demographics ZIP — columns (0-based):
+ *     0:Rok  1:Číslo obce  2:Název obce  3:Vznik  4:Stav 1.1.
+ *     5:Narozeni  6:Zemřelí  7:Přistěhovalí  8:Vystěhovalí
+ *     9:Přírůstek přirozený  10:Přírůstek migrační  11:Přírůstek celkový
+ *     12:Územní změna 1  13:Stav 31.12.  ...
+ *     → population=Stav 1.1., births, deaths, migration_balance
  *
- * Missing values are represented as "-", ".", or empty cells → stored as null.
+ *   Weddings ZIP — columns (0-based):
+ *     0:Rok  1:Číslo obce  2:Název obce  3:Sňatky  4:Rozvody  5:Potraty
+ *     → marriages, divorces
  *
- * Column mapping for data sheets (0-based after obec_kod at col 0):
- *   1: population, 2: births, 3: deaths, 4: migration_balance,
- *   5: marriages, 6: divorces, 7: unemployment_pct
- *
- * NOTE: column positions may differ per XLSX version — adjust COL_* constants
- * once you inspect actual files with a test run.
+ * OD_KAM sheets are skipped (succession handling deferred).
+ * Both ZIPs upsert into the same fact_obec_stats table via COALESCE merge.
  */
 public class CsuXlsxParser {
 
     private static final Logger log = LoggerFactory.getLogger(CsuXlsxParser.class);
 
-    private static final String OD_KAM_SHEET = "OD_KAM";
-
-    // Column indices in data sheets (0-based)
-    private static final int COL_OBEC_KOD          = 0;
-    private static final int COL_POPULATION         = 1;
-    private static final int COL_BIRTHS             = 2;
-    private static final int COL_DEATHS             = 3;
-    private static final int COL_MIGRATION_BALANCE  = 4;
-    private static final int COL_MARRIAGES          = 5;
-    private static final int COL_DIVORCES           = 6;
-    private static final int COL_UNEMPLOYMENT_PCT   = 7;
-
-    // Column indices in OD_KAM sheet
-    private static final int COL_OLD_KOD  = 0;
-    private static final int COL_NEW_KOD  = 2;
-    private static final int COL_YEAR     = 4;
-
-    // First data row (skip header row)
-    private static final int HEADER_ROWS = 1;
-
     public record ParseResult(
         List<ObecSuccessorRecord> successors,
         List<ObecStatsRecord>     stats) {}
 
-    /**
-     * Parses one CSU XLSX file.
-     *
-     * @param is    InputStream of the XLSX file
-     * @param year  the year this file represents (used for data sheets without year column)
-     */
-    public ParseResult parse(InputStream is, int year) throws IOException {
-        List<ObecSuccessorRecord> successors = new ArrayList<>();
-        List<ObecStatsRecord>     stats      = new ArrayList<>();
+    // -------------------------------------------------------------------------
+    // Public entry points
+    // -------------------------------------------------------------------------
 
-        try (Workbook wb = new XSSFWorkbook(is)) {
-            for (int i = 0; i < wb.getNumberOfSheets(); i++) {
-                Sheet sheet = wb.getSheetAt(i);
-                String name = wb.getSheetName(i);
-
-                if (OD_KAM_SHEET.equalsIgnoreCase(name)) {
-                    successors.addAll(parseOdKam(sheet));
-                } else {
-                    // Determine the year for this sheet: try to read from sheet name,
-                    // fall back to the year parameter
-                    int sheetYear = extractYearFromSheetName(name, year);
-                    stats.addAll(parseDataSheet(sheet, sheetYear));
+    /** Parses a ZIP archive containing multiple XLSX files (one per okres). */
+    public ParseResult parseZip(InputStream in) throws IOException {
+        List<ObecStatsRecord> all = new ArrayList<>();
+        int xlsxCount = 0;
+        try (ZipInputStream zis = new ZipInputStream(in)) {
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                String name = entry.getName();
+                if (!name.toLowerCase().endsWith(".xlsx")) { zis.closeEntry(); continue; }
+                byte[] bytes = zis.readAllBytes();
+                zis.closeEntry();
+                try (Workbook wb = new XSSFWorkbook(new ByteArrayInputStream(bytes))) {
+                    int before = all.size();
+                    parseWorkbook(wb, all);
+                    log.debug("{}: {} rows", name, all.size() - before);
+                    xlsxCount++;
+                } catch (Exception e) {
+                    log.warn("Skipping {}: {}", name, e.getMessage());
                 }
             }
         }
-        log.info("Parsed XLSX: {} successors, {} stat rows", successors.size(), stats.size());
-        return new ParseResult(successors, stats);
+        log.info("Parsed ZIP: {} XLSX files → {} stat rows", xlsxCount, all.size());
+        return new ParseResult(List.of(), all);
+    }
+
+    /** Parses a single XLSX file. */
+    public ParseResult parseXlsx(InputStream in) throws IOException {
+        List<ObecStatsRecord> all = new ArrayList<>();
+        try (Workbook wb = new XSSFWorkbook(in)) {
+            parseWorkbook(wb, all);
+        }
+        log.info("Parsed XLSX: {} stat rows", all.size());
+        return new ParseResult(List.of(), all);
     }
 
     // -------------------------------------------------------------------------
 
-    private List<ObecSuccessorRecord> parseOdKam(Sheet sheet) {
-        List<ObecSuccessorRecord> result = new ArrayList<>();
-        for (int r = HEADER_ROWS; r <= sheet.getLastRowNum(); r++) {
-            Row row = sheet.getRow(r);
-            if (row == null) continue;
-            String oldKod = str(row, COL_OLD_KOD);
-            String newKod = str(row, COL_NEW_KOD);
-            int    merged = intVal(row, COL_YEAR, 0);
-            if (oldKod == null || newKod == null || merged == 0) continue;
-            result.add(new ObecSuccessorRecord(oldKod, newKod, merged));
+    private void parseWorkbook(Workbook wb, List<ObecStatsRecord> out) {
+        for (int i = 0; i < wb.getNumberOfSheets(); i++) {
+            if ("OD_KAM".equalsIgnoreCase(wb.getSheetName(i))) continue;
+            parseDataSheet(wb.getSheetAt(i), out);
         }
-        return result;
     }
 
-    private List<ObecStatsRecord> parseDataSheet(Sheet sheet, int year) {
-        List<ObecStatsRecord> result = new ArrayList<>();
-        for (int r = HEADER_ROWS; r <= sheet.getLastRowNum(); r++) {
+    private enum SheetType { DEMOGRAPHICS, WEDDINGS }
+
+    private void parseDataSheet(Sheet sheet, List<ObecStatsRecord> out) {
+        // Find header: first row (within first 5) where col 0 text is "Rok"
+        int headerIdx = -1;
+        for (int r = 0; r <= Math.min(5, sheet.getLastRowNum()); r++) {
             Row row = sheet.getRow(r);
             if (row == null) continue;
-            String kodObce = str(row, COL_OBEC_KOD);
-            if (kodObce == null || kodObce.isBlank()) continue;
-            result.add(new ObecStatsRecord(
-                kodObce,
-                year,
-                intOrNull(row, COL_POPULATION),
-                intOrNull(row, COL_BIRTHS),
-                intOrNull(row, COL_DEATHS),
-                intOrNull(row, COL_MIGRATION_BALANCE),
-                intOrNull(row, COL_MARRIAGES),
-                intOrNull(row, COL_DIVORCES),
-                doubleOrNull(row, COL_UNEMPLOYMENT_PCT)
-            ));
+            if ("Rok".equalsIgnoreCase(strRaw(row, 0))) { headerIdx = r; break; }
         }
-        return result;
+        if (headerIdx < 0) return;
+
+        // Detect type: weddings have "Sňatky" (or ascii fallback) at col 3
+        String col3Header = strRaw(sheet.getRow(headerIdx), 3);
+        SheetType type = (col3Header != null
+                && (col3Header.toLowerCase().contains("sňatky")
+                 || col3Header.toLowerCase().contains("snatky")))
+                ? SheetType.WEDDINGS
+                : SheetType.DEMOGRAPHICS;
+
+        int parsed = 0;
+        for (int r = headerIdx + 1; r <= sheet.getLastRowNum(); r++) {
+            Row row = sheet.getRow(r);
+            if (row == null) continue;
+            Integer year    = intOrNull(row, 0);
+            String  kodObce = str(row, 1);
+            if (year == null || kodObce == null) continue;
+
+            ObecStatsRecord rec = switch (type) {
+                case DEMOGRAPHICS -> new ObecStatsRecord(
+                    kodObce, year,
+                    intOrNull(row, 4),   // Stav 1.1.           → population
+                    intOrNull(row, 5),   // Narozeni             → births
+                    intOrNull(row, 6),   // Zemřelí              → deaths
+                    intOrNull(row, 10),  // Přírůstek migrační   → migration_balance
+                    null, null, null
+                );
+                case WEDDINGS -> new ObecStatsRecord(
+                    kodObce, year,
+                    null, null, null, null,
+                    intOrNull(row, 3),   // Sňatky  → marriages
+                    intOrNull(row, 4),   // Rozvody → divorces
+                    null
+                );
+            };
+            out.add(rec);
+            parsed++;
+        }
+        if (parsed > 0)
+            log.debug("Sheet '{}' ({}): {} rows", sheet.getSheetName(), type, parsed);
     }
 
     // -------------------------------------------------------------------------
     // Cell helpers
     // -------------------------------------------------------------------------
 
-    private static String str(Row row, int col) {
+    private static String strRaw(Row row, int col) {
         Cell cell = row.getCell(col, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL);
         if (cell == null) return null;
-        String v = switch (cell.getCellType()) {
+        return switch (cell.getCellType()) {
             case STRING  -> cell.getStringCellValue().trim();
             case NUMERIC -> String.valueOf((long) cell.getNumericCellValue());
             default      -> null;
         };
+    }
+
+    private static String str(Row row, int col) {
+        String v = strRaw(row, col);
         if (v == null || v.isBlank() || "-".equals(v) || ".".equals(v)) return null;
         return v;
     }
 
     private static Integer intOrNull(Row row, int col) {
-        String s = str(row, col);
-        if (s == null) return null;
-        try { return Integer.parseInt(s.replace(" ", "")); }
-        catch (NumberFormatException e) { return null; }
-    }
-
-    private static int intVal(Row row, int col, int def) {
-        Integer v = intOrNull(row, col);
-        return v != null ? v : def;
-    }
-
-    private static Double doubleOrNull(Row row, int col) {
         Cell cell = row.getCell(col, Row.MissingCellPolicy.RETURN_BLANK_AS_NULL);
         if (cell == null) return null;
-        if (cell.getCellType() == CellType.NUMERIC) return cell.getNumericCellValue();
+        if (cell.getCellType() == CellType.NUMERIC)
+            return (int) cell.getNumericCellValue();
         String s = str(row, col);
         if (s == null) return null;
-        try { return Double.parseDouble(s.replace(",", ".")); }
-        catch (NumberFormatException e) { return null; }
-    }
-
-    private static int extractYearFromSheetName(String name, int fallback) {
-        // Sheet names like "2023", "rok_2023", "2023_data" etc.
-        String digits = name.replaceAll("[^0-9]", "");
-        if (digits.length() == 4) {
-            try { return Integer.parseInt(digits); }
-            catch (NumberFormatException ignored) {}
-        }
-        return fallback;
+        try {
+            // strip thousands separators (space or NBSP) and parse
+            return Integer.parseInt(s.replace(" ", "").replace(" ", ""));
+        } catch (NumberFormatException e) { return null; }
     }
 }
