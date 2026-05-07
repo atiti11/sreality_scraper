@@ -223,28 +223,36 @@ public class EnricherLoader {
             long hashId, long contentHash, GeoResult geo,
             Integer agencyId, LocalDate validFrom, LocalDate validTo,
             boolean isActive) throws SQLException {
-        boolean hasPerM2 = !dealType.equalsIgnoreCase("auction");
-        boolean isSaleOrRent = dealType.equalsIgnoreCase("sale") || dealType.equalsIgnoreCase("rent");
-        String priceCol = switch (dealType.toLowerCase()) {
-            case "rent" -> "price_monthly_czk,price_monthly_per_m2";
-            case "auction" -> "price_starting_bid_czk";
-            default -> "price_asked_czk,price_asked_per_m2";
-        };
-        // Build column list dynamically: include is_furnished only for Sale/Rent
-        String columns = "hash_id,content_hash,valid_from,valid_to,obec_id,cast_obce_id,agency_id,date_id,"
-                + "  gps_lat,gps_lon,is_active,first_seen_date,sreality_url,advert_images_count,has_floor_plan,has_video,"
-                + "  " + priceCol + ","
-                + "  sub_category,usable_area_m2,floor_number,total_floors,"
-                + "  ownership_label,building_type_label,building_condition_label,energy_rating_label,"
-                + "  is_new_building" + (isSaleOrRent ? ",is_furnished" : "")
-                + ",has_balcony,has_terrace,has_loggia,"
-                + "  has_cellar,has_elevator,has_parking,has_garage,is_barrier_free";
-        String sql = "INSERT INTO " + pg.t(table)
-                + " (" + columns + ")"
-                + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?"
-                + (hasPerM2 ? ",?,?" : ",?")
-                + (isSaleOrRent ? ",?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?" : ",?,?,?,?,?,?,?,?,?,?,?,?,?,?")
-                + ")";
+        boolean isSale = dealType.equalsIgnoreCase("sale");
+        boolean isRent = dealType.equalsIgnoreCase("rent");
+        boolean isAuction = dealType.equalsIgnoreCase("auction");
+
+        String sql;
+        if (isSale || isRent) {
+            String priceCols = isRent ? "price_monthly_czk,price_monthly_per_m2" : "price_asked_czk,price_asked_per_m2";
+            String columns = "hash_id,content_hash,valid_from,valid_to,obec_id,cast_obce_id,agency_id,date_id,"
+                    + "  gps_lat,gps_lon,is_active,first_seen_date,sreality_url,advert_images_count,has_floor_plan,has_video,"
+                    + "  " + priceCols + ","
+                    + "  sub_category,usable_area_m2,floor_number,total_floors,"
+                    + "  ownership_label,building_type_label,building_condition_label,energy_rating_label,"
+                    + "  is_new_building,is_furnished,has_balcony,has_terrace,has_loggia,"
+                    + "  has_cellar,has_elevator,has_parking,has_garage,is_barrier_free";
+            String placeholders = String.join(",", Collections.nCopies(35, "?"));
+            sql = "INSERT INTO " + pg.t(table) + " (" + columns + ") VALUES (" + placeholders + ")";
+        } else if (isAuction) {
+            String columns = "hash_id,content_hash,valid_from,valid_to,obec_id,cast_obce_id,agency_id,date_id,"
+                    + "  gps_lat,gps_lon,is_active,first_seen_date,sreality_url,advert_images_count,has_floor_plan,has_video,"
+                    + "  price_starting_bid_czk,"
+                    + "  sub_category,usable_area_m2,floor_number,total_floors,"
+                    + "  ownership_label,building_type_label,building_condition_label,energy_rating_label,"
+                    + "  is_new_building,has_balcony,has_terrace,has_loggia,"
+                    + "  has_cellar,has_elevator,has_parking,has_garage,is_barrier_free";
+            String placeholders = String.join(",", Collections.nCopies(35, "?"));
+            sql = "INSERT INTO " + pg.t(table) + " (" + columns + ") VALUES (" + placeholders + ")";
+        } else {
+            throw new IllegalArgumentException("Unknown deal type: " + dealType);
+        }
+
         try (Connection c = pg.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             int i = setCommon(ps, 1, doc, hashId, contentHash, geo, agencyId, validFrom, validTo, isActive);
             i = setPrice(ps, i, doc, dealType);
@@ -257,8 +265,9 @@ public class EnricherLoader {
             ps.setString(i++, str(doc, "building_condition_label"));
             ps.setString(i++, energyLabel(doc));
             setBoolOrNull(ps, i++, doc, "is_new");
-            if (isSaleOrRent)
+            if (isSale || isRent) {
                 setBoolOrNull(ps, i++, doc, "is_furnished");
+            }
             setBoolOrNull(ps, i++, doc, "has_balcony");
             setBoolOrNull(ps, i++, doc, "has_terrace");
             setBoolOrNull(ps, i++, doc, "has_loggia");
