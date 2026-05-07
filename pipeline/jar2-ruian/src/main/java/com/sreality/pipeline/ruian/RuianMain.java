@@ -99,6 +99,7 @@ public class RuianMain {
         ParseResult result = new RuianVfrParser().parse(xmlFile);
         loader.loadKraje(result.kraje());
         loader.loadOkresy(result.okresy());
+        loader.ensureSyntheticOkresy();
         loader.loadObce(result.obce());
         loader.loadCastiObci(result.castiObci());
         loader.saveSnapshotDate(snap, result.castiObci().size());

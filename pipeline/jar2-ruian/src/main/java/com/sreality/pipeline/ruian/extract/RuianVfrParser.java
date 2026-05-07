@@ -184,6 +184,9 @@ public class RuianVfrParser {
                 case "Kod"      -> { if (kod      == null) kod      = r.getElementText(); else skipElement(r); }
                 case "Nazev"    -> { if (nazev    == null) nazev    = r.getElementText(); else skipElement(r); }
                 case "Okres"    -> kodOkresu = parseFirstKodChild(r);
+                // Praha has no <Okres> — it references <Pou> whose kod equals Praha's VUSC kod.
+                // Use it as fallback so Praha obec gets a valid kodOkresu for the synthetic Okres.
+                case "Pou"      -> { if (kodOkresu == null) kodOkresu = parseFirstKodChild(r); else skipElement(r); }
                 case "ZanikloOd"-> { zaniklo = r.getElementText(); }
                 default         -> skipElement(r);
             }

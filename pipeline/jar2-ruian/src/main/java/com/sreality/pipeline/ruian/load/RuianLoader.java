@@ -79,6 +79,20 @@ public class RuianLoader {
         log.info("Upserted {} okres, skipped {}", ok, skip);
     }
 
+    // For kraje that have no real Okres (only Praha in practice), insert a synthetic
+    // Okres row using the kraj's own kod so that obcí referencing it via <Pou> can resolve.
+    public void ensureSyntheticOkresy() throws SQLException {
+        String sql = "INSERT INTO " + pg.t("dim_okres") + " (kod_okresu, nazev_okresu, kraj_id)"
+                + " SELECT k.kod_kraje, k.nazev_kraje, k.id FROM " + pg.t("dim_kraj") + " k"
+                + " WHERE NOT EXISTS ("
+                + "   SELECT 1 FROM " + pg.t("dim_okres") + " o WHERE o.kraj_id = k.id"
+                + " ) ON CONFLICT (kod_okresu) DO NOTHING";
+        try (Connection c = pg.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+            int n = ps.executeUpdate();
+            if (n > 0) log.info("Inserted {} synthetic okres(y) for kraj(e) with no real okres", n);
+        }
+    }
+
     public void loadObce(List<ObecRecord> rows) throws SQLException {
         String lookup = "SELECT id FROM " + pg.t("dim_okres") + " WHERE kod_okresu=?";
         String upsert = "INSERT INTO " + pg.t("dim_obec") + " (kod_obce,nazev_obce,okres_id,is_active) VALUES (?,?,?,?)"
