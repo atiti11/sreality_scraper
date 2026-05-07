@@ -239,7 +239,7 @@ public class EnricherLoader {
                 + "  has_cellar,has_elevator,has_parking,has_garage,is_barrier_free)"
                 + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?"
                 + (hasPerM2 ? ",?,?" : ",?")
-                + ",?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+                + ",?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
         try (Connection c = pg.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             int i = setCommon(ps, 1, doc, hashId, contentHash, geo, agencyId, validFrom, validTo, isActive);
             i = setPrice(ps, i, doc, dealType);
