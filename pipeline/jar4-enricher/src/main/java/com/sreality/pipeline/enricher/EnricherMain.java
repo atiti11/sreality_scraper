@@ -19,16 +19,17 @@ import java.util.List;
  * JAR 4 entry point — Estate Enricher.
  *
  * Drains the MongoDB staging queue:
- *   For each of the 15 MongoDB collections (one per category):
- *     1. Read all documents from the collection.
- *     2. Enrich each document (spatial join, SCD write, field changes, detail text).
- *     3. Delete each document from MongoDB after successful Postgres write.
+ * For each of the 15 MongoDB collections (one per category):
+ * 1. Read all documents from the collection.
+ * 2. Enrich each document (spatial join, SCD write, field changes, detail
+ * text).
+ * 3. Delete each document from MongoDB after successful Postgres write.
  *
  * MongoDB is left empty after each enricher run — it is purely a staging queue.
  *
  * Env vars:
- *   MONGO_HOST, MONGO_PORT, MONGO_DATABASE, MONGO_USERNAME, MONGO_PASSWORD
- *   PG_* (Postgres connection)
+ * MONGO_HOST, MONGO_PORT, MONGO_DATABASE, MONGO_USERNAME, MONGO_PASSWORD
+ * PG_* (Postgres connection)
  */
 public class EnricherMain {
 
@@ -40,13 +41,14 @@ public class EnricherMain {
         String mongoUri = buildMongoUri();
         log.info("Connecting to MongoDB: {}", mongoUri.replaceAll(":([^@/]+)@", ":***@"));
 
-        try (MongoClient          mongo = MongoClients.create(mongoUri);
-             PostgresConnectionPool pg  = new PostgresConnectionPool()) {
+        try (MongoClient mongo = MongoClients.create(mongoUri);
+                PostgresConnectionPool pg = new PostgresConnectionPool()) {
 
-            MongoDatabase db      = mongo.getDatabase(env("MONGO_DATABASE", "sreality"));
+            MongoDatabase db = mongo.getDatabase(env("MONGO_DATABASE", "sreality"));
             EnricherLoader loader = new EnricherLoader(pg);
 
             int totalInserted = 0, totalUpdated = 0, totalSkipped = 0, totalErrors = 0;
+            int totalObecMatched = 0, totalCastMatched = 0, totalUnmatched = 0;
 
             // Process all 15 category collections
             for (int cm = 1; cm <= 5; cm++) {
@@ -67,9 +69,21 @@ public class EnricherMain {
                         WriteResult result = loader.process(doc);
                         switch (result) {
                             case INSERTED -> totalInserted++;
-                            case UPDATED  -> totalUpdated++;
-                            case SKIPPED  -> totalSkipped++;
-                            case ERROR    -> { totalErrors++; continue; }
+                            case UPDATED -> totalUpdated++;
+                            case SKIPPED -> totalSkipped++;
+                            case ERROR -> {
+                                totalErrors++;
+                                continue;
+                            }
+                        }
+                        if (result != WriteResult.ERROR) {
+                            boolean geoResolved = Boolean.TRUE.equals(doc.getBoolean("_geo_resolved"));
+                            if (geoResolved)
+                                totalObecMatched++;
+                            if (Boolean.TRUE.equals(doc.getBoolean("_geo_cast_resolved")))
+                                totalCastMatched++;
+                            if (!geoResolved)
+                                totalUnmatched++;
                         }
                         // Delete from MongoDB only after successful Postgres write
                         col.deleteOne(new Document("_id", doc.get("_id")));
@@ -77,8 +91,10 @@ public class EnricherMain {
                 }
             }
 
-            log.info("Enricher complete: inserted={} updated={} skipped={} errors={}",
-                totalInserted, totalUpdated, totalSkipped, totalErrors);
+            log.info("Enricher complete: inserted={} updated={} skipped={} errors={} " +
+                    "obec_matched={} cast_matched={} unmatched={}",
+                    totalInserted, totalUpdated, totalSkipped, totalErrors,
+                    totalObecMatched, totalCastMatched, totalUnmatched);
 
             if (totalErrors > 0) {
                 log.warn("{} documents left in MongoDB due to errors — will be retried next run.", totalErrors);
@@ -92,13 +108,13 @@ public class EnricherMain {
     }
 
     private static String buildMongoUri() {
-        String host = env("MONGO_HOST",     "localhost");
-        String port = env("MONGO_PORT",     "27017");
+        String host = env("MONGO_HOST", "localhost");
+        String port = env("MONGO_PORT", "27017");
         String user = env("MONGO_USERNAME", "scraper");
         String pass = env("MONGO_PASSWORD", "changeme");
-        String db   = env("MONGO_DATABASE", "sreality");
+        String db = env("MONGO_DATABASE", "sreality");
         return "mongodb://" + user + ":" + pass + "@" + host + ":" + port + "/" + db
-             + "?authSource=" + db;
+                + "?authSource=" + db;
     }
 
     private static String env(String key, String def) {

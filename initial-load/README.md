@@ -49,6 +49,8 @@ java -Xmx512m -jar target/initial-load.jar
 
 The log is also written to `initial-load.log` in the current directory.
 
+The loader now writes estates even when the RUIAN spatial join fails. Those rows are inserted with null `obec_id`/`cast_obce_id` and can be counted in the load summary.
+
 ## After the load — verification queries
 
 ```sql
@@ -59,9 +61,10 @@ UNION ALL SELECT 'house_sale',     COUNT(*) FROM fact_house_sale
 UNION ALL SELECT 'house_rent',     COUNT(*) FROM fact_house_rent
 UNION ALL SELECT 'land_sale',      COUNT(*) FROM fact_land_sale;
 
--- How many have a valid spatial join (cast_obce_id not null)?
-SELECT COUNT(*) FILTER (WHERE cast_obce_id IS NOT NULL) AS with_geo,
-       COUNT(*) FILTER (WHERE cast_obce_id IS NULL)     AS without_geo
+-- How many were matched to obec / cast_obce / unmatched?
+SELECT COUNT(*) FILTER (WHERE obec_id IS NOT NULL) AS obec_matched,
+       COUNT(*) FILTER (WHERE cast_obce_id IS NOT NULL) AS cast_obce_matched,
+       COUNT(*) FILTER (WHERE obec_id IS NULL)       AS unmatched
 FROM fact_apartment_sale;
 
 -- Active vs inactive

@@ -21,40 +21,41 @@ import java.util.List;
  *
  * KEY DIFFERENCES from the regular enricher (JAR 4):
  *
- *   1. Reads all documents — not just the staging queue.
- *      The regular enricher only processes documents recently written by
- *      the scraper. This loader reads everything already in MongoDB.
+ * 1. Reads all documents — not just the staging queue.
+ * The regular enricher only processes documents recently written by
+ * the scraper. This loader reads everything already in MongoDB.
  *
- *   2. Does NOT delete from MongoDB.
- *      Run verification queries in Postgres first. Delete MongoDB documents
- *      manually once you are satisfied the data is correct.
+ * 2. Does NOT delete from MongoDB.
+ * Run verification queries in Postgres first. Delete MongoDB documents
+ * manually once you are satisfied the data is correct.
  *
- *   3. Uses _first_seen_at as valid_from (not today).
- *      The EnricherLoader already does this — _first_seen_at is parsed
- *      and used as first_seen_date. For the initial load this also becomes
- *      the valid_from date, preserving the real scrape history.
- *      NOTE: EnricherLoader uses LocalDate.now() as valid_from for new rows.
- *      The InitialLoadEnricherLoader subclass overrides this to use
- *      _first_seen_at instead, so history is preserved correctly.
+ * 3. Uses _first_seen_at as valid_from (not today).
+ * The EnricherLoader already does this — _first_seen_at is parsed
+ * and used as first_seen_date. For the initial load this also becomes
+ * the valid_from date, preserving the real scrape history.
+ * NOTE: EnricherLoader uses LocalDate.now() as valid_from for new rows.
+ * The InitialLoadEnricherLoader subclass overrides this to use
+ * _first_seen_at instead, so history is preserved correctly.
  *
- *   4. Skips documents with last_update_corrupted=true if they also have
- *      _detail_available=false — these have no enrichable data.
- *      They are counted and logged so you can decide what to do with them.
+ * 4. Skips documents with last_update_corrupted=true if they also have
+ * _detail_available=false — these have no enrichable data.
+ * They are counted and logged so you can decide what to do with them.
  *
- *   5. Idempotent — if a document is already in Postgres (same content_hash),
- *      it is skipped. Safe to re-run after partial failures.
+ * 5. Idempotent — if a document is already in Postgres (same content_hash),
+ * it is skipped. Safe to re-run after partial failures.
  *
  * Prerequisites:
- *   - Postgres schema must exist (start docker-compose.pipeline.yml first)
- *   - RUIAN dimensions must be loaded (run jar2-ruian.jar first)
- *     The spatial join will fail for any estate whose GPS is outside the
- *     loaded RUIAN bounding boxes — those are counted as errors, not skipped.
+ * - Postgres schema must exist (start docker-compose.pipeline.yml first)
+ * - RUIAN dimensions must be loaded (run jar2-ruian.jar first)
+ * The spatial join will fail for any estate whose GPS is outside the
+ * loaded RUIAN bounding boxes — those are counted as errors, not skipped.
  *
  * Env vars:
- *   MONGO_HOST, MONGO_PORT, MONGO_DATABASE, MONGO_USERNAME, MONGO_PASSWORD
- *   PG_HOST, PG_PORT, PG_DATABASE, PG_USERNAME, PG_PASSWORD, PG_SCHEMA
- *   INITIAL_LOAD_BATCH_SIZE  (default: 500 — documents fetched per Mongo cursor batch)
- *   INITIAL_LOAD_DRY_RUN     (default: false — set "true" to count without writing)
+ * MONGO_HOST, MONGO_PORT, MONGO_DATABASE, MONGO_USERNAME, MONGO_PASSWORD
+ * PG_HOST, PG_PORT, PG_DATABASE, PG_USERNAME, PG_PASSWORD, PG_SCHEMA
+ * INITIAL_LOAD_BATCH_SIZE (default: 500 — documents fetched per Mongo cursor
+ * batch)
+ * INITIAL_LOAD_DRY_RUN (default: false — set "true" to count without writing)
  */
 public class InitialLoadMain {
 
@@ -65,24 +66,28 @@ public class InitialLoadMain {
         log.info("NOTE: MongoDB documents will NOT be deleted.");
         log.info("Verify Postgres data before manually cleaning up MongoDB.");
 
-        boolean dryRun    = "true".equalsIgnoreCase(env("INITIAL_LOAD_DRY_RUN", "false"));
-        int     batchSize = Integer.parseInt(env("INITIAL_LOAD_BATCH_SIZE", "500"));
+        boolean dryRun = "true".equalsIgnoreCase(env("INITIAL_LOAD_DRY_RUN", "false"));
+        int batchSize = Integer.parseInt(env("INITIAL_LOAD_BATCH_SIZE", "500"));
 
-        if (dryRun) log.info("DRY RUN MODE — counting documents only, nothing will be written.");
+        if (dryRun)
+            log.info("DRY RUN MODE — counting documents only, nothing will be written.");
 
         String mongoUri = buildMongoUri();
 
         // Counters across all collections
-        long totalDocs      = 0;
-        long totalInserted  = 0;
-        long totalSkipped   = 0;
-        long totalErrors    = 0;
+        long totalDocs = 0;
+        long totalInserted = 0;
+        long totalSkipped = 0;
+        long totalErrors = 0;
         long totalCorrupted = 0;
+        long totalObecMatched = 0;
+        long totalCastMatched = 0;
+        long totalUnmatched = 0;
 
-        try (MongoClient           mongo = MongoClients.create(mongoUri);
-             PostgresConnectionPool pg   = new PostgresConnectionPool()) {
+        try (MongoClient mongo = MongoClients.create(mongoUri);
+                PostgresConnectionPool pg = new PostgresConnectionPool()) {
 
-            MongoDatabase   db      = mongo.getDatabase(env("MONGO_DATABASE", "sreality"));
+            MongoDatabase db = mongo.getDatabase(env("MONGO_DATABASE", "sreality"));
             InitialEnricher enricher = dryRun ? null : new InitialEnricher(pg);
 
             // Iterate all 15 MongoDB collections in order
@@ -107,7 +112,7 @@ public class InitialLoadMain {
                             totalDocs++;
 
                             // Skip documents with no enrichable detail
-                            Boolean corrupted  = doc.getBoolean("last_update_corrupted");
+                            Boolean corrupted = doc.getBoolean("last_update_corrupted");
                             Boolean detailAvail = doc.getBoolean("_detail_available");
                             if (Boolean.TRUE.equals(corrupted) && !Boolean.TRUE.equals(detailAvail)) {
                                 colCorrupted++;
@@ -123,19 +128,28 @@ public class InitialLoadMain {
                             WriteResult result = enricher.process(doc);
                             switch (result) {
                                 case INSERTED -> colInserted++;
-                                case UPDATED  -> colInserted++; // treat updates same as inserts for reporting
-                                case SKIPPED  -> colSkipped++;
-                                case ERROR    -> colErrors++;
+                                case UPDATED -> colInserted++; // treat updates same as inserts for reporting
+                                case SKIPPED -> colSkipped++;
+                                case ERROR -> colErrors++;
+                            }
+                            if (result != WriteResult.ERROR) {
+                                boolean geoResolved = Boolean.TRUE.equals(doc.getBoolean("_geo_resolved"));
+                                if (geoResolved)
+                                    totalObecMatched++;
+                                if (Boolean.TRUE.equals(doc.getBoolean("_geo_cast_resolved")))
+                                    totalCastMatched++;
+                                if (!geoResolved)
+                                    totalUnmatched++;
                             }
                         }
                     }
 
-                    totalInserted  += colInserted;
-                    totalSkipped   += colSkipped;
-                    totalErrors    += colErrors;
+                    totalInserted += colInserted;
+                    totalSkipped += colSkipped;
+                    totalErrors += colErrors;
 
                     log.info("[{}] done — written={} skipped={} errors={} corrupted_skipped={}",
-                        collection, colInserted, colSkipped, colErrors, colCorrupted);
+                            collection, colInserted, colSkipped, colErrors, colCorrupted);
                 }
             }
 
@@ -148,6 +162,9 @@ public class InitialLoadMain {
         log.info("Total documents seen:    {}", totalDocs);
         log.info("Written to Postgres:     {}", totalInserted);
         log.info("Already in Postgres:     {}", totalSkipped);
+        log.info("Obec matched:            {}", totalObecMatched);
+        log.info("Cast obce matched:       {}", totalCastMatched);
+        log.info("Unmatched geography:     {}", totalUnmatched);
         log.info("Errors (GPS/schema):     {}", totalErrors);
         log.info("Corrupted docs skipped:  {}", totalCorrupted);
         log.info("");
@@ -165,13 +182,13 @@ public class InitialLoadMain {
     // -------------------------------------------------------------------------
 
     private static String buildMongoUri() {
-        String host = env("MONGO_HOST",     "localhost");
-        String port = env("MONGO_PORT",     "27017");
+        String host = env("MONGO_HOST", "localhost");
+        String port = env("MONGO_PORT", "27017");
         String user = env("MONGO_USERNAME", "scraper");
         String pass = env("MONGO_PASSWORD", "changeme");
-        String db   = env("MONGO_DATABASE", "sreality");
+        String db = env("MONGO_DATABASE", "sreality");
         return "mongodb://" + user + ":" + pass + "@" + host + ":" + port
-             + "/" + db + "?authSource=" + db;
+                + "/" + db + "?authSource=" + db;
     }
 
     private static String env(String key, String def) {
