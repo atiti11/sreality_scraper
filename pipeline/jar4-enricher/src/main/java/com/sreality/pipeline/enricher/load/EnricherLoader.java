@@ -237,9 +237,9 @@ public class EnricherLoader {
                 + "  ownership_label,building_type_label,building_condition_label,energy_rating_label,"
                 + "  is_new_building,is_furnished,has_balcony,has_terrace,has_loggia,"
                 + "  has_cellar,has_elevator,has_parking,has_garage,is_barrier_free)"
-                + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,"
-                + (hasPerM2 ? "?,?," : "?,")
-                + "  ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+                + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?"
+                + (hasPerM2 ? ",?,?" : ",?")
+                + ",?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
         try (Connection c = pg.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             int i = setCommon(ps, 1, doc, hashId, contentHash, geo, agencyId, validFrom, validTo, isActive);
             i = setPrice(ps, i, doc, dealType);
@@ -283,9 +283,9 @@ public class EnricherLoader {
                 + "  building_type_label,building_condition_label,energy_rating_label,"
                 + "  is_new_building,is_low_energy,is_furnished,"
                 + "  has_terrace,has_balcony,has_cellar,has_garage,has_parking,has_pool,is_barrier_free)"
-                + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,"
-                + (hasPerM2 ? "?,?," : "?,")
-                + "  ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+                + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?"
+                + (hasPerM2 ? ",?,?" : ",?")
+                + ",?,?,?,?,?,?,?,?,?,?,?,?)";
         try (Connection c = pg.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             int i = setCommon(ps, 1, doc, hashId, contentHash, geo, agencyId, validFrom, validTo, isActive);
             i = setPrice(ps, i, doc, dealType);
@@ -351,8 +351,9 @@ public class EnricherLoader {
                 + "  " + priceCol + ","
                 + "  usable_area_m2,floor_area_m2,building_condition_label,energy_rating_label,"
                 + "  has_elevator,has_parking,is_barrier_free)"
-                + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,"
-                + (hasPerM2 ? "?,?," : "?,") + "  ?,?,?,?,?,?,?)";
+                + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?"
+                + (hasPerM2 ? ",?,?" : ",?")
+                + ",?,?,?,?,?,?)";
         try (Connection c = pg.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             int i = setCommon(ps, 1, doc, hashId, contentHash, geo, agencyId, validFrom, validTo, isActive);
             i = setPrice(ps, i, doc, dealType);
