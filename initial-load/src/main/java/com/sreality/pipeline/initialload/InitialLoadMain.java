@@ -105,11 +105,20 @@ public class InitialLoadMain {
 
                     long colInserted = 0, colSkipped = 0, colErrors = 0, colCorrupted = 0;
 
+                    // Determine property type and deal type from collection name
+                    String propertyType = propertyTypeFromCategoryMain(cm);
+                    String dealType = dealTypeFromCategoryType(ct);
+
                     // Stream with batchSize to avoid loading all into memory at once
                     try (var cursor = col.find().batchSize(batchSize).cursor()) {
                         while (cursor.hasNext()) {
                             Document doc = cursor.next();
                             totalDocs++;
+
+                            // Ensure correct deal_type and property_type for this document
+                            // (fix corrupted or missing fields)
+                            doc.put("deal_type", dealType);
+                            doc.put("property_type", propertyType);
 
                             // Skip documents with no enrichable detail
                             Boolean corrupted = doc.getBoolean("last_update_corrupted");
@@ -194,5 +203,25 @@ public class InitialLoadMain {
     private static String env(String key, String def) {
         String v = System.getenv(key);
         return (v != null && !v.isBlank()) ? v : def;
+    }
+
+    private static String propertyTypeFromCategoryMain(int cm) {
+        return switch (cm) {
+            case 1 -> "Apartment";
+            case 2 -> "House";
+            case 3 -> "Land";
+            case 4 -> "Commercial";
+            case 5 -> "Other";
+            default -> throw new IllegalArgumentException("Unknown category_main_cb: " + cm);
+        };
+    }
+
+    private static String dealTypeFromCategoryType(int ct) {
+        return switch (ct) {
+            case 1 -> "Sale";
+            case 2 -> "Rent";
+            case 3 -> "Auction";
+            default -> throw new IllegalArgumentException("Unknown category_type_cb: " + ct);
+        };
     }
 }
