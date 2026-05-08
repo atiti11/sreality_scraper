@@ -1,61 +1,40 @@
 package com.sreality.pipeline.ruian.model;
 
 /**
- * Cast obce dimension record.
+ * Cast obce dimension record — carries raw S-JTSK coordinates straight from
+ * the RUIAN VFR XML; the loader does {@code ST_Transform(... 5514, 4326)} in
+ * Postgres to derive WGS84.
  *
- * Carries:
- *   - identity   : kod / nazev / parent kodObce
- *   - centroid   : RUIAN DefinicniBod, reprojected from S-JTSK to WGS84
- *   - bbox       : envelope of the boundary polygon, kept for human queries
- *                  and as a backup spatial filter
- *   - geomWkt    : authoritative MULTIPOLYGON in WGS84 (lon lat order),
- *                  null when the RUIAN record has no boundary geometry
+ * Why no Java-side reprojection: the in-house {@code SjtskToWgs84} produced
+ * wrong values (axis-order + Krovak constant bugs). PostGIS uses PROJ which
+ * is the canonical implementation, so we delegate to it.
  *
- * SpatialJoiner uses {@code geom} (loaded from {@link #geomWkt()}) via
- * ST_Contains for accurate point-in-polygon resolution.
+ * EPSG:5514 axis order is (easting, northing). RUIAN VFR encodes
+ * {@code <gml:pos>} accordingly: first value = easting (Y in Czech historical
+ * convention, large negative number for CR), second = northing (X, large
+ * negative number for CR).
  */
 public record CastObceRecord(
         String kodCastObce,
         String nazevCastObce,
         String kodObce,
-        double centroidLat,
-        double centroidLon,
-        double bboxMinLat,
-        double bboxMinLon,
-        double bboxMaxLat,
-        double bboxMaxLon,
-        String geomWkt) {
+        double sjtskEasting,    // <gml:pos> first value (≈ -750 000 for Prague)
+        double sjtskNorthing,   // <gml:pos> second value (≈ -1 043 000 for Prague)
+        String geomWktSjtsk     // MULTIPOLYGON in S-JTSK, or null when no polygon
+) {
 
-    // Fallback expansion (~500 m) used when only the centroid is known.
-    private static final double LAT_EXP = 0.0045;
-    private static final double LON_EXP = 0.006;
-
-    /**
-     * Fallback factory: only the DefinicniBod centroid is available.
-     * Bbox is faked from centroid ± fixed expansion; geomWkt is null.
-     */
+    /** Plain factory: only the DefinicniBod centroid is available. */
     public static CastObceRecord fromCentroid(
-            String kod, String nazev, String kodObce, double lat, double lon) {
-        return new CastObceRecord(
-            kod, nazev, kodObce, lat, lon,
-            lat - LAT_EXP, lon - LON_EXP,
-            lat + LAT_EXP, lon + LON_EXP,
-            null);
+            String kod, String nazev, String kodObce,
+            double sjtskEasting, double sjtskNorthing) {
+        return new CastObceRecord(kod, nazev, kodObce, sjtskEasting, sjtskNorthing, null);
     }
 
-    /**
-     * Polygon-aware factory. Bbox is the polygon envelope, geomWkt is the
-     * MULTIPOLYGON WKT in WGS84.
-     */
+    /** Polygon-aware factory. */
     public static CastObceRecord fromPolygon(
             String kod, String nazev, String kodObce,
-            double centroidLat, double centroidLon,
-            double bboxMinLat, double bboxMinLon,
-            double bboxMaxLat, double bboxMaxLon,
-            String geomWkt) {
-        return new CastObceRecord(
-            kod, nazev, kodObce, centroidLat, centroidLon,
-            bboxMinLat, bboxMinLon, bboxMaxLat, bboxMaxLon,
-            geomWkt);
+            double sjtskEasting, double sjtskNorthing,
+            String geomWktSjtsk) {
+        return new CastObceRecord(kod, nazev, kodObce, sjtskEasting, sjtskNorthing, geomWktSjtsk);
     }
 }

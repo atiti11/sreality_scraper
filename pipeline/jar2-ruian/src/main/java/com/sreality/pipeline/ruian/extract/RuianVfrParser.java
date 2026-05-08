@@ -222,7 +222,7 @@ public class RuianVfrParser {
     private CastObceRecord parseCastObce(XMLStreamReader r) throws XMLStreamException {
         String kod = null, nazev = null, kodObce = null;
         double[] sjtskCentroid = null;
-        // multipolygon -> polygon -> ring -> [x, y]_sjtsk
+        // multipolygon -> polygon -> ring -> [easting, northing]_sjtsk (raw)
         List<List<List<double[]>>> sjtskPolygons = new ArrayList<>();
 
         while (r.hasNext()) {
@@ -245,26 +245,26 @@ public class RuianVfrParser {
         if (kod == null) return null;
         String n = (nazev != null && !nazev.isBlank()) ? nazev : "CAST_" + kod;
 
-        // Build WGS84 polygon WKT (and bbox envelope) if we have a polygon
-        if (!sjtskPolygons.isEmpty()) {
-            EnvelopedWkt ew = buildMultiPolygonWkt(sjtskPolygons);
-            if (ew != null) {
-                double[] centroidWgs = (sjtskCentroid != null)
-                    ? SjtskToWgs84.convert(sjtskCentroid[0], sjtskCentroid[1])
-                    // fallback: bbox center
-                    : new double[]{(ew.minLat + ew.maxLat) / 2.0, (ew.minLon + ew.maxLon) / 2.0};
-                return CastObceRecord.fromPolygon(
-                    kod, n, kodObce,
-                    centroidWgs[0], centroidWgs[1],
-                    ew.minLat, ew.minLon, ew.maxLat, ew.maxLon,
-                    ew.wkt);
-            }
+        if (sjtskCentroid == null && sjtskPolygons.isEmpty()) return null;
+
+        // S-JTSK values are passed through to Postgres as-is; the loader does
+        // ST_Transform(... 5514, 4326) to derive WGS84 lat/lon and the geom column.
+        String wkt = sjtskPolygons.isEmpty() ? null : buildMultiPolygonWktSjtsk(sjtskPolygons);
+
+        // Centroid: prefer DefinicniBod, otherwise fall back to first polygon vertex
+        double easting, northing;
+        if (sjtskCentroid != null) {
+            easting = sjtskCentroid[0];
+            northing = sjtskCentroid[1];
+        } else {
+            double[] first = sjtskPolygons.get(0).get(0).get(0);
+            easting = first[0];
+            northing = first[1];
         }
 
-        // Fallback: only DefinicniBod is available
-        if (sjtskCentroid == null) return null;
-        double[] wgs = SjtskToWgs84.convert(sjtskCentroid[0], sjtskCentroid[1]);
-        return CastObceRecord.fromCentroid(kod, n, kodObce, wgs[0], wgs[1]);
+        return wkt == null
+            ? CastObceRecord.fromCentroid(kod, n, kodObce, easting, northing)
+            : CastObceRecord.fromPolygon(kod, n, kodObce, easting, northing, wkt);
     }
 
     // -------------------------------------------------------------------------
@@ -488,31 +488,24 @@ public class RuianVfrParser {
     }
 
     // =========================================================================
-    // S-JTSK polygons → WGS84 MULTIPOLYGON WKT
+    // S-JTSK polygons → raw S-JTSK MULTIPOLYGON WKT (no reprojection here;
+    // Postgres does ST_Transform(... 5514, 4326) at insert time)
     // =========================================================================
 
-    private record EnvelopedWkt(String wkt,
-                                double minLat, double minLon,
-                                double maxLat, double maxLon) {}
-
     /**
-     * Converts a list of S-JTSK polygons (each polygon = list of rings, each
-     * ring = list of [x, y]) to a single MULTIPOLYGON WKT string in WGS84,
-     * along with the WGS84 envelope of all vertices.
+     * Builds a MULTIPOLYGON WKT string in S-JTSK (EPSG:5514). Coordinates are
+     * written as {@code easting northing} pairs straight from {@code <gml:pos>}
+     * / {@code <gml:posList>}, no axis swap, no reprojection.
      *
-     * Returns null if no valid polygon can be built.
+     * Returns null if no valid polygon ring (size ≥ 4) is available.
      */
-    private static EnvelopedWkt buildMultiPolygonWkt(
+    private static String buildMultiPolygonWktSjtsk(
             List<List<List<double[]>>> sjtskPolygons) {
 
         StringBuilder sb = new StringBuilder("MULTIPOLYGON(");
         boolean firstPoly = true;
-        double minLat = Double.POSITIVE_INFINITY, maxLat = Double.NEGATIVE_INFINITY;
-        double minLon = Double.POSITIVE_INFINITY, maxLon = Double.NEGATIVE_INFINITY;
-
         for (List<List<double[]>> polygon : sjtskPolygons) {
             if (polygon == null || polygon.isEmpty()) continue;
-            // require at least one ring with 4+ points
             boolean polyOk = false;
             for (List<double[]> ring : polygon) {
                 if (ring != null && ring.size() >= 4) { polyOk = true; break; }
@@ -529,24 +522,17 @@ public class RuianVfrParser {
                 firstRing = false;
                 sb.append("(");
                 boolean firstPoint = true;
-                for (double[] sjtsk : ring) {
-                    double[] wgs = SjtskToWgs84.convert(sjtsk[0], sjtsk[1]);
-                    double lat = wgs[0], lon = wgs[1];
-                    if (lat < minLat) minLat = lat;
-                    if (lat > maxLat) maxLat = lat;
-                    if (lon < minLon) minLon = lon;
-                    if (lon > maxLon) maxLon = lon;
+                for (double[] xy : ring) {
                     if (!firstPoint) sb.append(",");
                     firstPoint = false;
-                    // WKT uses (lon lat) for geographic coordinates
-                    sb.append(lon).append(' ').append(lat);
+                    // EPSG:5514 axis order = (easting, northing); WKT mirrors it
+                    sb.append(xy[0]).append(' ').append(xy[1]);
                 }
                 sb.append(")");
             }
             sb.append(")");
         }
         sb.append(")");
-        if (firstPoly) return null;   // no polygon was emitted
-        return new EnvelopedWkt(sb.toString(), minLat, minLon, maxLat, maxLon);
+        return firstPoly ? null : sb.toString();
     }
 }

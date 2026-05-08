@@ -128,14 +128,26 @@ public class RuianLoader {
 
     public void loadCastiObci(List<CastObceRecord> rows) throws SQLException {
         String lookup = "SELECT id FROM " + pg.t("dim_obec") + " WHERE kod_obce=?";
-        // geom is loaded via ST_Multi(ST_GeomFromText(?, 4326)). When the WKT
-        // bind is NULL, ST_GeomFromText returns NULL (it's STRICT) so the row
-        // simply ends up with geom = NULL.
+        // Postgres performs the S-JTSK -> WGS84 reprojection via PostGIS
+        // ST_Transform; centroid, bbox and the geom column are all derived from
+        // the same EPSG:5514 inputs in one SELECT subquery.
+        //
+        // Bindings:
+        //   1 kod_cast_obce  2 nazev  3 obec_id
+        //   4 sjtsk_easting (centroid)  5 sjtsk_northing (centroid)
+        //   6 wkt_sjtsk (polygon, NULL when missing)
         String upsert = "INSERT INTO " + pg.t("dim_cast_obce")
                 + " (kod_cast_obce,nazev_cast_obce,obec_id,"
                 + "  bbox_min_lat,bbox_min_lon,bbox_max_lat,bbox_max_lon,"
                 + "  centroid_lat,centroid_lon,geom)"
-                + " VALUES (?,?,?,?,?,?,?,?,?, ST_Multi(ST_GeomFromText(?, 4326)))"
+                + " SELECT ?,?,?,"
+                + "        ST_YMin(gw), ST_XMin(gw), ST_YMax(gw), ST_XMax(gw),"
+                + "        ST_Y(cw), ST_X(cw),"
+                + "        ST_Multi(gw)"
+                + " FROM (SELECT"
+                + "   ST_Transform(ST_SetSRID(ST_MakePoint(?, ?), 5514), 4326) AS cw,"
+                + "   ST_Transform(ST_GeomFromText(?, 5514), 4326)             AS gw"
+                + " ) src"
                 + " ON CONFLICT (kod_cast_obce) DO UPDATE SET"
                 + "  nazev_cast_obce=EXCLUDED.nazev_cast_obce,obec_id=EXCLUDED.obec_id,"
                 + "  bbox_min_lat=EXCLUDED.bbox_min_lat,bbox_min_lon=EXCLUDED.bbox_min_lon,"
@@ -152,8 +164,8 @@ public class RuianLoader {
                     skip++;
                     continue;
                 }
-                if (r.centroidLat() == 0 && r.centroidLon() == 0) {
-                    log.debug("Skipping cast_obce {}: zero coordinates", r.kodCastObce());
+                if (r.sjtskEasting() == 0 && r.sjtskNorthing() == 0) {
+                    log.debug("Skipping cast_obce {}: zero S-JTSK coordinates", r.kodCastObce());
                     skip++;
                     continue;
                 }
@@ -167,17 +179,13 @@ public class RuianLoader {
                     ups.setString(1, r.kodCastObce());
                     ups.setString(2, nazev);
                     ups.setInt(3, rs.getInt(1));
-                    ups.setDouble(4, r.bboxMinLat());
-                    ups.setDouble(5, r.bboxMinLon());
-                    ups.setDouble(6, r.bboxMaxLat());
-                    ups.setDouble(7, r.bboxMaxLon());
-                    ups.setDouble(8, r.centroidLat());
-                    ups.setDouble(9, r.centroidLon());
-                    if (r.geomWkt() != null) {
-                        ups.setString(10, r.geomWkt());
+                    ups.setDouble(4, r.sjtskEasting());
+                    ups.setDouble(5, r.sjtskNorthing());
+                    if (r.geomWktSjtsk() != null) {
+                        ups.setString(6, r.geomWktSjtsk());
                         withGeom++;
                     } else {
-                        ups.setNull(10, java.sql.Types.VARCHAR);
+                        ups.setNull(6, java.sql.Types.VARCHAR);
                     }
                     ups.execute();
                     ok++;
