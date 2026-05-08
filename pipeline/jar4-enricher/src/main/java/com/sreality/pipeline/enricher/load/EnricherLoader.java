@@ -237,7 +237,7 @@ public class EnricherLoader {
                     + "  ownership_label,building_type_label,building_condition_label,energy_rating_label,"
                     + "  is_new_building,is_furnished,has_balcony,has_terrace,has_loggia,"
                     + "  has_cellar,has_elevator,has_parking,has_garage,is_barrier_free";
-            String placeholders = String.join(",", Collections.nCopies(35, "?"));
+            String placeholders = String.join(",", Collections.nCopies(36, "?"));
             sql = "INSERT INTO " + pg.t(table) + " (" + columns + ") VALUES (" + placeholders + ")";
         } else if (isAuction) {
             String columns = "hash_id,content_hash,valid_from,valid_to,obec_id,cast_obce_id,agency_id,date_id,"
