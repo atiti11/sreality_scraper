@@ -102,9 +102,11 @@ public class RuianMain {
         loader.ensureSyntheticOkresy();
         loader.loadObce(result.obce());
         loader.loadCastiObci(result.castiObci());
+        loader.loadMestskeCasti(result.mestskeCasti());
         loader.saveSnapshotDate(snap, result.castiObci().size());
-        log.info("RUIAN load complete: {} kraj / {} okres / {} obec / {} cast_obce",
+        log.info("RUIAN load complete: {} kraj / {} okres / {} obec / {} cast_obce / {} mestska_cast",
             result.kraje().size(), result.okresy().size(),
-            result.obce().size(), result.castiObci().size());
+            result.obce().size(), result.castiObci().size(),
+            result.mestskeCasti().size());
     }
 }

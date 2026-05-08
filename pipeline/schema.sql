@@ -59,6 +59,24 @@ CREATE TABLE IF NOT EXISTS dim_cast_obce (
     geom              geometry(MultiPolygon, 4326)
 );
 
+-- Mestske casti / mestske obvody (RUIAN MOP + MOMC, both kept here).
+--   typ='MOP'  -> 22 records, only Praha (Praha 1 ... Praha 22)
+--   typ='MOMC' -> ~150 records (Praha-Holesovice, Brno-Zabovresky, Ostrava-Jih ...)
+CREATE TABLE IF NOT EXISTS dim_mestska_cast (
+    id                  SERIAL PRIMARY KEY,
+    kod_mestska_cast    VARCHAR(20)  NOT NULL UNIQUE,
+    nazev_mestska_cast  VARCHAR(100) NOT NULL,
+    obec_id             INT          NOT NULL REFERENCES dim_obec(id),
+    typ                 VARCHAR(10)  NOT NULL CHECK (typ IN ('MOP','MOMC')),
+    bbox_min_lat        NUMERIC(10,6),
+    bbox_min_lon        NUMERIC(10,6),
+    bbox_max_lat        NUMERIC(10,6),
+    bbox_max_lon        NUMERIC(10,6),
+    centroid_lat        NUMERIC(10,6),
+    centroid_lon        NUMERIC(10,6),
+    geom                geometry(MultiPolygon, 4326)
+);
+
 -- Municipality succession: when obec A is merged into obec B,
 -- insert (old_obec_kod=A, new_obec_kod=B, merged_year=YYYY).
 -- Source: CSU OD_KAM sheet, loaded once during initial CSU load.
@@ -688,6 +706,9 @@ CREATE INDEX IF NOT EXISTS idx_dim_obec_active      ON dim_obec(is_active);
 CREATE INDEX IF NOT EXISTS idx_dim_cast_obec_bbox   ON dim_cast_obce(bbox_min_lat, bbox_max_lat, bbox_min_lon, bbox_max_lon);
 CREATE INDEX IF NOT EXISTS idx_dim_cast_obec_obec   ON dim_cast_obce(obec_id);
 CREATE INDEX IF NOT EXISTS idx_dim_cast_obec_geom   ON dim_cast_obce USING GIST (geom);
+CREATE INDEX IF NOT EXISTS idx_dim_mc_obec          ON dim_mestska_cast(obec_id);
+CREATE INDEX IF NOT EXISTS idx_dim_mc_typ           ON dim_mestska_cast(typ);
+CREATE INDEX IF NOT EXISTS idx_dim_mc_geom          ON dim_mestska_cast USING GIST (geom);
 
 -- CSU stats
 CREATE INDEX IF NOT EXISTS idx_fact_obec_stats_year ON fact_obec_stats(year);

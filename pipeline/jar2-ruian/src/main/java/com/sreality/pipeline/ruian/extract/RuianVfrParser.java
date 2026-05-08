@@ -29,16 +29,18 @@ public class RuianVfrParser {
     private static final Logger log = LoggerFactory.getLogger(RuianVfrParser.class);
 
     public record ParseResult(
-        List<KrajRecord>     kraje,
-        List<OkresRecord>    okresy,
-        List<ObecRecord>     obce,
-        List<CastObceRecord> castiObci) {}
+        List<KrajRecord>        kraje,
+        List<OkresRecord>       okresy,
+        List<ObecRecord>        obce,
+        List<CastObceRecord>    castiObci,
+        List<MestskaCastRecord> mestskeCasti) {}
 
     public ParseResult parse(Path xmlFile) throws IOException, XMLStreamException {
-        List<KrajRecord>     kraje     = new ArrayList<>();
-        List<OkresRecord>    okresy    = new ArrayList<>();
-        List<ObecRecord>     obce      = new ArrayList<>();
-        List<CastObceRecord> castiObci = new ArrayList<>();
+        List<KrajRecord>        kraje         = new ArrayList<>();
+        List<OkresRecord>       okresy        = new ArrayList<>();
+        List<ObecRecord>        obce          = new ArrayList<>();
+        List<CastObceRecord>    castiObci     = new ArrayList<>();
+        List<MestskaCastRecord> mestskeCasti  = new ArrayList<>();
 
         XMLInputFactory factory = XMLInputFactory.newInstance();
         factory.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
@@ -56,10 +58,14 @@ public class RuianVfrParser {
                     case "Okresy"    -> parseContainerOf(r, "Okres",    sub -> { OkresRecord o    = parseOkres(sub);     if (o  != null) okresy.add(o); });
                     case "Obce"      -> parseContainerOf(r, "Obec",     sub -> { ObecRecord ob    = parseObec(sub);      if (ob != null) obce.add(ob); });
                     case "CastiObci" -> parseContainerOf(r, "CastObce", sub -> { CastObceRecord c = parseCastObce(sub);  if (c  != null) castiObci.add(c); });
+                    // Mestske obvody Prahy (MOP) and mestske casti / obvody (MOMC).
+                    // Element names in RUIAN VFR: container == record == "Mop" / "Momc".
+                    case "Mop"       -> parseContainerOf(r, "Mop",      sub -> { MestskaCastRecord m = parseMestskaCast(sub, "MOP");  if (m != null) mestskeCasti.add(m); });
+                    case "Momc"      -> parseContainerOf(r, "Momc",     sub -> { MestskaCastRecord m = parseMestskaCast(sub, "MOMC"); if (m != null) mestskeCasti.add(m); });
                     // Explicitly skip containers whose children contain Obec/Okres/CastObce
                     // FK references — without this they leak into the cases above.
                     case "KatastralniUzemi", "SpravniObvody",
-                         "Orp", "Pou", "Momc", "Mop", "Zsj",
+                         "Orp", "Pou", "Zsj",
                          "RegionySoudrznosti", "Staty", "Hlavicka" -> skipElement(r);
                     // No default: wrapper elements (VymennyFormat, Data, …) are
                     // traversed naturally by the StAX event loop.
@@ -67,10 +73,14 @@ public class RuianVfrParser {
             }
             r.close();
         }
-        long withGeom = castiObci.stream().filter(c -> c.geomWktSjtsk() != null).count();
-        log.info("Parsed: {} vusc(kraj), {} okres, {} obec, {} cast_obce ({} with polygon)",
-            kraje.size(), okresy.size(), obce.size(), castiObci.size(), withGeom);
-        return new ParseResult(kraje, okresy, obce, castiObci);
+        long withGeom   = castiObci.stream().filter(c -> c.geomWktSjtsk() != null).count();
+        long mcWithGeom = mestskeCasti.stream().filter(m -> m.geomWktSjtsk() != null).count();
+        long mopCount   = mestskeCasti.stream().filter(m -> "MOP".equals(m.typ())).count();
+        long momcCount  = mestskeCasti.size() - mopCount;
+        log.info("Parsed: {} vusc(kraj), {} okres, {} obec, {} cast_obce ({} with polygon), {} mestska_cast ({} MOP / {} MOMC, {} with polygon)",
+            kraje.size(), okresy.size(), obce.size(), castiObci.size(), withGeom,
+            mestskeCasti.size(), mopCount, momcCount, mcWithGeom);
+        return new ParseResult(kraje, okresy, obce, castiObci, mestskeCasti);
     }
 
     @FunctionalInterface
@@ -265,6 +275,54 @@ public class RuianVfrParser {
         return wkt == null
             ? CastObceRecord.fromCentroid(kod, n, kodObce, easting, northing)
             : CastObceRecord.fromPolygon(kod, n, kodObce, easting, northing, wkt);
+    }
+
+    // -------------------------------------------------------------------------
+    // <vf:Mop> or <vf:Momc> (record): Kod, Nazev, Obec FK, Geometrie
+    // (other fields like StatutMesto, MluvnickeCharakteristiky etc are ignored)
+    // -------------------------------------------------------------------------
+    private MestskaCastRecord parseMestskaCast(XMLStreamReader r, String typ)
+            throws XMLStreamException {
+        String kod = null, nazev = null, kodObce = null;
+        double[] sjtskCentroid = null;
+        List<List<List<double[]>>> sjtskPolygons = new ArrayList<>();
+
+        while (r.hasNext()) {
+            int ev = r.next();
+            if (ev == XMLStreamConstants.END_ELEMENT) break;
+            if (ev != XMLStreamConstants.START_ELEMENT) continue;
+            switch (r.getLocalName()) {
+                case "Kod"       -> { if (kod   == null) kod   = r.getElementText(); else skipElement(r); }
+                case "Nazev"     -> { if (nazev == null) nazev = r.getElementText(); else skipElement(r); }
+                case "Obec"      -> kodObce = parseFirstKodChild(r);
+                case "Geometrie" -> {
+                    GeometrieResult g = parseGeometrie(r);
+                    if (g.centroid != null && sjtskCentroid == null) sjtskCentroid = g.centroid;
+                    if (!g.polygons.isEmpty()) sjtskPolygons.addAll(g.polygons);
+                }
+                default          -> skipElement(r);
+            }
+        }
+        if (kod == null) return null;
+        String n = (nazev != null && !nazev.isBlank()) ? nazev : (typ + "_" + kod);
+
+        if (sjtskCentroid == null && sjtskPolygons.isEmpty()) return null;
+
+        String wkt = sjtskPolygons.isEmpty() ? null : buildMultiPolygonWktSjtsk(sjtskPolygons);
+
+        double easting, northing;
+        if (sjtskCentroid != null) {
+            easting = sjtskCentroid[0];
+            northing = sjtskCentroid[1];
+        } else {
+            double[] first = sjtskPolygons.get(0).get(0).get(0);
+            easting = first[0];
+            northing = first[1];
+        }
+
+        return wkt == null
+            ? MestskaCastRecord.fromCentroid(kod, n, kodObce, typ, easting, northing)
+            : MestskaCastRecord.fromPolygon (kod, n, kodObce, typ, easting, northing, wkt);
     }
 
     // -------------------------------------------------------------------------
