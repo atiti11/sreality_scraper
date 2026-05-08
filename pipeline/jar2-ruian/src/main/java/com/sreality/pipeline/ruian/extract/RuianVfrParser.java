@@ -67,7 +67,7 @@ public class RuianVfrParser {
             }
             r.close();
         }
-        long withGeom = castiObci.stream().filter(c -> c.geomWkt() != null).count();
+        long withGeom = castiObci.stream().filter(c -> c.geomWktSjtsk() != null).count();
         log.info("Parsed: {} vusc(kraj), {} okres, {} obec, {} cast_obce ({} with polygon)",
             kraje.size(), okresy.size(), obce.size(), castiObci.size(), withGeom);
         return new ParseResult(kraje, okresy, obce, castiObci);
