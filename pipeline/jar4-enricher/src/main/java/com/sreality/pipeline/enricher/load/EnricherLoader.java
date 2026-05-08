@@ -303,7 +303,7 @@ public class EnricherLoader {
                 + " (" + columns + ")"
                 + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?"
                 + (hasPerM2 ? ",?,?" : ",?")
-                + (isSaleOrRent ? ",?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?" : ",?,?,?,?,?,?,?,?,?,?,?,?,?,?")
+                + (isSaleOrRent ? ",?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?" : ",?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?")
                 + ")";
         try (Connection c = pg.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             int i = setCommon(ps, 1, doc, hashId, contentHash, geo, agencyId, validFrom, validTo, isActive);
@@ -348,7 +348,11 @@ public class EnricherLoader {
                 + (hasPerM2 ? "?,?," : "?,") + "  ?,?)";
         try (Connection c = pg.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             int i = setCommon(ps, 1, doc, hashId, contentHash, geo, agencyId, validFrom, validTo, isActive);
-            i = setPrice(ps, i, doc, dealType);
+            if (hasPerM2) {
+                i = setPrice(ps, i, doc, dealType);
+            } else {
+                i = setSinglePrice(ps, i, doc);
+            }
             ps.setString(i++, str(doc, "sub_category"));
             setDoubleOrNull(ps, i++, parseAreaDouble(str(doc, "area_plocha_pozemku")));
             ps.execute();
@@ -373,7 +377,7 @@ public class EnricherLoader {
                 + "  has_elevator,has_parking,is_barrier_free)"
                 + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?"
                 + (hasPerM2 ? ",?,?" : ",?")
-                + ",?,?,?,?,?,?)";
+                + ",?,?,?,?,?,?,?)";
         try (Connection c = pg.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             int i = setCommon(ps, 1, doc, hashId, contentHash, geo, agencyId, validFrom, validTo, isActive);
             i = setPrice(ps, i, doc, dealType);
@@ -400,7 +404,7 @@ public class EnricherLoader {
                 + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
         try (Connection c = pg.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             int i = setCommon(ps, 1, doc, hashId, contentHash, geo, agencyId, validFrom, validTo, isActive);
-            i = setPrice(ps, i, doc, dealType);
+            i = setSinglePrice(ps, i, doc);
             setIntOrNull(ps, i++, getUsableArea(doc));
             setDoubleOrNull(ps, i++, parseAreaDouble(str(doc, "area_plocha_pozemku")));
             ps.execute();
@@ -484,6 +488,20 @@ public class EnricherLoader {
         if (price == 0 || areaSqm == null || areaSqm == 0)
             return null;
         return Math.round((double) price / areaSqm * 100.0) / 100.0;
+    }
+
+    /**
+     * Sets a single price placeholder (for tables that have only one price column,
+     * e.g. fact_land_rent, fact_other_sale, fact_other_rent).
+     */
+    private int setSinglePrice(PreparedStatement ps, int i, Document doc)
+            throws SQLException {
+        long price = getLong(doc, "price_czk_value");
+        if (price == 0)
+            ps.setNull(i++, Types.BIGINT);
+        else
+            ps.setLong(i++, price);
+        return i;
     }
 
     // =========================================================================

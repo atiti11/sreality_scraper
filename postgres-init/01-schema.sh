@@ -15,6 +15,11 @@ psql -v ON_ERROR_STOP=1 \
 << 'ENDSQL'
 
 -- ---------------------------------------------------------------------------
+-- PostGIS extension (required for polygon-based spatial join on dim_cast_obce)
+-- ---------------------------------------------------------------------------
+CREATE EXTENSION IF NOT EXISTS postgis;
+
+-- ---------------------------------------------------------------------------
 -- Geography dimensions  (Kraj → Okres → Obec → CastObce)
 -- ---------------------------------------------------------------------------
 
@@ -49,7 +54,11 @@ CREATE TABLE IF NOT EXISTS dim_cast_obce (
     bbox_max_lat    NUMERIC(10,6),
     bbox_max_lon    NUMERIC(10,6),
     centroid_lat    NUMERIC(10,6),
-    centroid_lon    NUMERIC(10,6)
+    centroid_lon    NUMERIC(10,6),
+    -- Boundary polygon in WGS84. Loaded from RUIAN VFR <gml:MultiSurface>.
+    -- Used by SpatialJoiner via ST_Contains for accurate point-in-polygon lookup.
+    -- May be NULL for cast_obce whose RUIAN record omits the boundary.
+    geom            geometry(MultiPolygon, 4326)
 );
 
 -- Municipality succession (sourced from CSU OD_KAM sheet)
@@ -616,6 +625,7 @@ CREATE INDEX IF NOT EXISTS idx_dim_obec_okres     ON dim_obec(okres_id);
 CREATE INDEX IF NOT EXISTS idx_dim_obec_active    ON dim_obec(is_active);
 CREATE INDEX IF NOT EXISTS idx_dim_cast_bbox      ON dim_cast_obce(bbox_min_lat, bbox_max_lat, bbox_min_lon, bbox_max_lon);
 CREATE INDEX IF NOT EXISTS idx_dim_cast_obec      ON dim_cast_obce(obec_id);
+CREATE INDEX IF NOT EXISTS idx_dim_cast_geom      ON dim_cast_obce USING GIST (geom);
 CREATE INDEX IF NOT EXISTS idx_obec_stats_year    ON fact_obec_stats(year);
 
 DO $$

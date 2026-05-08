@@ -128,15 +128,21 @@ public class RuianLoader {
 
     public void loadCastiObci(List<CastObceRecord> rows) throws SQLException {
         String lookup = "SELECT id FROM " + pg.t("dim_obec") + " WHERE kod_obce=?";
+        // geom is loaded via ST_Multi(ST_GeomFromText(?, 4326)). When the WKT
+        // bind is NULL, ST_GeomFromText returns NULL (it's STRICT) so the row
+        // simply ends up with geom = NULL.
         String upsert = "INSERT INTO " + pg.t("dim_cast_obce")
-                + " (kod_cast_obce,nazev_cast_obce,obec_id,bbox_min_lat,bbox_min_lon,bbox_max_lat,bbox_max_lon,centroid_lat,centroid_lon)"
-                + " VALUES (?,?,?,?,?,?,?,?,?)"
+                + " (kod_cast_obce,nazev_cast_obce,obec_id,"
+                + "  bbox_min_lat,bbox_min_lon,bbox_max_lat,bbox_max_lon,"
+                + "  centroid_lat,centroid_lon,geom)"
+                + " VALUES (?,?,?,?,?,?,?,?,?, ST_Multi(ST_GeomFromText(?, 4326)))"
                 + " ON CONFLICT (kod_cast_obce) DO UPDATE SET"
                 + "  nazev_cast_obce=EXCLUDED.nazev_cast_obce,obec_id=EXCLUDED.obec_id,"
                 + "  bbox_min_lat=EXCLUDED.bbox_min_lat,bbox_min_lon=EXCLUDED.bbox_min_lon,"
                 + "  bbox_max_lat=EXCLUDED.bbox_max_lat,bbox_max_lon=EXCLUDED.bbox_max_lon,"
-                + "  centroid_lat=EXCLUDED.centroid_lat,centroid_lon=EXCLUDED.centroid_lon";
-        int ok = 0, skip = 0;
+                + "  centroid_lat=EXCLUDED.centroid_lat,centroid_lon=EXCLUDED.centroid_lon,"
+                + "  geom=EXCLUDED.geom";
+        int ok = 0, skip = 0, withGeom = 0;
         try (Connection c = pg.getConnection();
                 PreparedStatement lps = c.prepareStatement(lookup);
                 PreparedStatement ups = c.prepareStatement(upsert)) {
@@ -167,12 +173,19 @@ public class RuianLoader {
                     ups.setDouble(7, r.bboxMaxLon());
                     ups.setDouble(8, r.centroidLat());
                     ups.setDouble(9, r.centroidLon());
+                    if (r.geomWkt() != null) {
+                        ups.setString(10, r.geomWkt());
+                        withGeom++;
+                    } else {
+                        ups.setNull(10, java.sql.Types.VARCHAR);
+                    }
                     ups.execute();
                     ok++;
                 }
             }
         }
-        log.info("Upserted {} cast_obce, skipped {}", ok, skip);
+        log.info("Upserted {} cast_obce ({} with polygon geometry), skipped {}",
+                ok, withGeom, skip);
     }
 
     public void saveSnapshotDate(LocalDate date, int castObceCount) throws SQLException {

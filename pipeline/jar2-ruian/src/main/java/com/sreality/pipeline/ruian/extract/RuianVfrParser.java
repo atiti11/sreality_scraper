@@ -19,6 +19,10 @@ import java.util.*;
  * We use skipElement() to consume any subtree we don't care about. This is
  * correct because XMLStreamReader.next() tracks its own depth internally —
  * we never manually track depth. getElementText() consumes text + END_ELEMENT.
+ *
+ * For CastObce we additionally extract the boundary polygon from
+ * <gml:MultiSurface> / <gml:Polygon>, reproject every vertex from S-JTSK to
+ * WGS84, and emit a MULTIPOLYGON WKT string consumable by PostGIS.
  */
 public class RuianVfrParser {
 
@@ -63,8 +67,9 @@ public class RuianVfrParser {
             }
             r.close();
         }
-        log.info("Parsed: {} vusc(kraj), {} okres, {} obec, {} cast_obce",
-            kraje.size(), okresy.size(), obce.size(), castiObci.size());
+        long withGeom = castiObci.stream().filter(c -> c.geomWkt() != null).count();
+        log.info("Parsed: {} vusc(kraj), {} okres, {} obec, {} cast_obce ({} with polygon)",
+            kraje.size(), okresy.size(), obce.size(), castiObci.size(), withGeom);
         return new ParseResult(kraje, okresy, obce, castiObci);
     }
 
@@ -114,13 +119,9 @@ public class RuianVfrParser {
     // -------------------------------------------------------------------------
     private KrajRecord parseVusc(XMLStreamReader r) throws XMLStreamException {
         String kod = null, nazev = null;
-        // Reader is ON <Vusc> START_ELEMENT. Iterate children.
         while (r.hasNext()) {
             int ev = r.next();
-            if (ev == XMLStreamConstants.END_ELEMENT) {
-                // Matched </Vusc> — done
-                break;
-            }
+            if (ev == XMLStreamConstants.END_ELEMENT) break;
             if (ev != XMLStreamConstants.START_ELEMENT) continue;
 
             switch (r.getLocalName()) {
@@ -154,7 +155,7 @@ public class RuianVfrParser {
             switch (r.getLocalName()) {
                 case "Kod"   -> { if (kod   == null) kod   = r.getElementText(); else skipElement(r); }
                 case "Nazev" -> { if (nazev == null) nazev = r.getElementText(); else skipElement(r); }
-                case "Vusc"  -> kodVusc = parseFirstKodChild(r); // reads <Vusc> subtree, returns inner Kod
+                case "Vusc"  -> kodVusc = parseFirstKodChild(r);
                 default      -> skipElement(r);
             }
         }
@@ -185,7 +186,6 @@ public class RuianVfrParser {
                 case "Nazev"    -> { if (nazev    == null) nazev    = r.getElementText(); else skipElement(r); }
                 case "Okres"    -> kodOkresu = parseFirstKodChild(r);
                 // Praha has no <Okres> — it references <Pou> whose kod equals Praha's VUSC kod.
-                // Use it as fallback so Praha obec gets a valid kodOkresu for the synthetic Okres.
                 case "Pou"      -> { if (kodOkresu == null) kodOkresu = parseFirstKodChild(r); else skipElement(r); }
                 case "ZanikloOd"-> { zaniklo = r.getElementText(); }
                 default         -> skipElement(r);
@@ -201,19 +201,30 @@ public class RuianVfrParser {
     // <vf:CastObce>
     //   <coi:Kod>400001</coi:Kod>
     //   <coi:Nazev>Adamov</coi:Nazev>
-    //   <coi:Obec>
-    //     <obi:Kod>500011</obi:Kod>  ← FK
-    //   </coi:Obec>
+    //   <coi:Obec><obi:Kod>500011</obi:Kod></coi:Obec>
     //   <coi:Geometrie>
     //     <coi:DefinicniBod>
-    //       <gml:Point><gml:pos>-123456.00 -456789.00</gml:pos></gml:Point>
+    //       <gml:Point><gml:pos>X Y</gml:pos></gml:Point>
     //     </coi:DefinicniBod>
+    //     <coi:OriginalniHranice|GeneralizovaneHranice_Hranice>
+    //       <gml:MultiSurface>
+    //         <gml:surfaceMember>
+    //           <gml:Polygon>
+    //             <gml:exterior><gml:LinearRing><gml:posList>X1 Y1 X2 Y2 …</gml:posList></gml:LinearRing></gml:exterior>
+    //             [<gml:interior>…</gml:interior>]*
+    //           </gml:Polygon>
+    //         </gml:surfaceMember>*
+    //       </gml:MultiSurface>
+    //     </…>
     //   </coi:Geometrie>
     // </vf:CastObce>
     // -------------------------------------------------------------------------
     private CastObceRecord parseCastObce(XMLStreamReader r) throws XMLStreamException {
         String kod = null, nazev = null, kodObce = null;
-        double[] sjtsk = null;
+        double[] sjtskCentroid = null;
+        // multipolygon -> polygon -> ring -> [x, y]_sjtsk
+        List<List<List<double[]>>> sjtskPolygons = new ArrayList<>();
+
         while (r.hasNext()) {
             int ev = r.next();
             if (ev == XMLStreamConstants.END_ELEMENT) break;
@@ -223,13 +234,36 @@ public class RuianVfrParser {
                 case "Kod"       -> { if (kod   == null) kod   = r.getElementText(); else skipElement(r); }
                 case "Nazev"     -> { if (nazev == null) nazev = r.getElementText(); else skipElement(r); }
                 case "Obec"      -> kodObce = parseFirstKodChild(r);
-                case "Geometrie" -> { if (sjtsk == null) sjtsk = parseDefinicniBod(r); else skipElement(r); }
+                case "Geometrie" -> {
+                    GeometrieResult g = parseGeometrie(r);
+                    if (g.centroid != null && sjtskCentroid == null) sjtskCentroid = g.centroid;
+                    if (!g.polygons.isEmpty()) sjtskPolygons.addAll(g.polygons);
+                }
                 default          -> skipElement(r);
             }
         }
-        if (kod == null || sjtsk == null) return null;
-        double[] wgs = SjtskToWgs84.convert(sjtsk[0], sjtsk[1]);
+        if (kod == null) return null;
         String n = (nazev != null && !nazev.isBlank()) ? nazev : "CAST_" + kod;
+
+        // Build WGS84 polygon WKT (and bbox envelope) if we have a polygon
+        if (!sjtskPolygons.isEmpty()) {
+            EnvelopedWkt ew = buildMultiPolygonWkt(sjtskPolygons);
+            if (ew != null) {
+                double[] centroidWgs = (sjtskCentroid != null)
+                    ? SjtskToWgs84.convert(sjtskCentroid[0], sjtskCentroid[1])
+                    // fallback: bbox center
+                    : new double[]{(ew.minLat + ew.maxLat) / 2.0, (ew.minLon + ew.maxLon) / 2.0};
+                return CastObceRecord.fromPolygon(
+                    kod, n, kodObce,
+                    centroidWgs[0], centroidWgs[1],
+                    ew.minLat, ew.minLon, ew.maxLat, ew.maxLon,
+                    ew.wkt);
+            }
+        }
+
+        // Fallback: only DefinicniBod is available
+        if (sjtskCentroid == null) return null;
+        double[] wgs = SjtskToWgs84.convert(sjtskCentroid[0], sjtskCentroid[1]);
         return CastObceRecord.fromCentroid(kod, n, kodObce, wgs[0], wgs[1]);
     }
 
@@ -254,34 +288,265 @@ public class RuianVfrParser {
         return kod;
     }
 
-    // -------------------------------------------------------------------------
-    // Helper: reader is ON <Geometrie> START_ELEMENT.
-    // Digs for <DefinicniBod> → <Point> → <pos> and returns S-JTSK coords.
-    // Consumes through </Geometrie>.
-    // -------------------------------------------------------------------------
-    private double[] parseDefinicniBod(XMLStreamReader r) throws XMLStreamException {
-        double[] result = null;
+    // =========================================================================
+    // Geometry parsing
+    // =========================================================================
+
+    private record GeometrieResult(
+            double[] centroid,
+            List<List<List<double[]>>> polygons) {}
+
+    /**
+     * Reader is ON {@code <Geometrie>}. Captures:
+     *   - the first {@code <DefinicniBod>/<gml:Point>/<gml:pos>} as centroid
+     *   - any {@code <gml:MultiSurface>} or {@code <gml:Polygon>} encountered,
+     *     recursively descending through any wrapper elements
+     *     (OriginalniHranice / GeneralizovaneHranice_Hranice / …).
+     * Consumes through {@code </Geometrie>}.
+     */
+    private GeometrieResult parseGeometrie(XMLStreamReader r) throws XMLStreamException {
+        double[] centroid = null;
+        List<List<List<double[]>>> polygons = new ArrayList<>();
         while (r.hasNext()) {
             int ev = r.next();
-            if (ev == XMLStreamConstants.END_ELEMENT && "Geometrie".equals(r.getLocalName())) break;
+            if (ev == XMLStreamConstants.END_ELEMENT) break;
             if (ev != XMLStreamConstants.START_ELEMENT) continue;
-
-            if ("pos".equals(r.getLocalName())) {
-                String raw = r.getElementText().trim();
-                String[] parts = raw.split("\\s+");
-                if (parts.length >= 2 && result == null) {
-                    try {
-                        result = new double[]{
-                            Double.parseDouble(parts[0]),
-                            Double.parseDouble(parts[1])
-                        };
-                    } catch (NumberFormatException ignored) {}
+            switch (r.getLocalName()) {
+                case "DefinicniBod" -> {
+                    if (centroid == null) centroid = parseGeomPoint(r);
+                    else skipElement(r);
                 }
-            } else {
-                // Don't skip here — we need to descend into DefinicniBod/Point
-                // Just let the loop continue naturally (START_ELEMENT events accumulate)
+                default -> {
+                    // Any other child of <Geometrie> may contain the boundary.
+                    // Recursively look for MultiSurface / Polygon inside.
+                    polygons.addAll(parseAnyPolygonContainer(r));
+                }
             }
         }
-        return result;
+        return new GeometrieResult(centroid, polygons);
+    }
+
+    /**
+     * Reader is ON some container element; recursively descends until it hits
+     * {@code <gml:MultiSurface>} / {@code <gml:MultiPolygon>} / {@code <gml:Polygon>}
+     * and parses them. Anything not on the path to a polygon is skipped.
+     * Consumes through the container's END_ELEMENT.
+     */
+    private List<List<List<double[]>>> parseAnyPolygonContainer(XMLStreamReader r)
+            throws XMLStreamException {
+        List<List<List<double[]>>> out = new ArrayList<>();
+        while (r.hasNext()) {
+            int ev = r.next();
+            if (ev == XMLStreamConstants.END_ELEMENT) break;
+            if (ev != XMLStreamConstants.START_ELEMENT) continue;
+            switch (r.getLocalName()) {
+                case "MultiSurface", "MultiPolygon" -> out.addAll(parseMultiSurface(r));
+                case "Polygon" -> {
+                    List<List<double[]>> poly = parsePolygon(r);
+                    if (poly != null) out.add(poly);
+                }
+                default -> out.addAll(parseAnyPolygonContainer(r));
+            }
+        }
+        return out;
+    }
+
+    /** Reader is ON {@code <DefinicniBod>}. Returns S-JTSK [x, y] of inner Point. */
+    private double[] parseGeomPoint(XMLStreamReader r) throws XMLStreamException {
+        double[] pos = null;
+        while (r.hasNext()) {
+            int ev = r.next();
+            if (ev == XMLStreamConstants.END_ELEMENT) break;
+            if (ev != XMLStreamConstants.START_ELEMENT) continue;
+            if ("pos".equals(r.getLocalName()) && pos == null) {
+                pos = parsePosPair(r.getElementText());
+            } else if (pos == null) {
+                // Descend into <gml:Point> looking for <gml:pos>
+                double[] inner = parseGeomPoint(r);
+                if (inner != null) pos = inner;
+            } else {
+                skipElement(r);
+            }
+        }
+        return pos;
+    }
+
+    /** Reader is ON {@code <gml:MultiSurface>} or similar. */
+    private List<List<List<double[]>>> parseMultiSurface(XMLStreamReader r)
+            throws XMLStreamException {
+        List<List<List<double[]>>> out = new ArrayList<>();
+        while (r.hasNext()) {
+            int ev = r.next();
+            if (ev == XMLStreamConstants.END_ELEMENT) break;
+            if (ev != XMLStreamConstants.START_ELEMENT) continue;
+            switch (r.getLocalName()) {
+                case "surfaceMember", "polygonMember" -> {
+                    List<List<double[]>> poly = parseSurfaceMember(r);
+                    if (poly != null) out.add(poly);
+                }
+                case "Polygon" -> {
+                    List<List<double[]>> poly = parsePolygon(r);
+                    if (poly != null) out.add(poly);
+                }
+                default -> skipElement(r);
+            }
+        }
+        return out;
+    }
+
+    /** Reader is ON {@code <gml:surfaceMember>}/{@code <gml:polygonMember>}. */
+    private List<List<double[]>> parseSurfaceMember(XMLStreamReader r) throws XMLStreamException {
+        List<List<double[]>> polygon = null;
+        while (r.hasNext()) {
+            int ev = r.next();
+            if (ev == XMLStreamConstants.END_ELEMENT) break;
+            if (ev != XMLStreamConstants.START_ELEMENT) continue;
+            if ("Polygon".equals(r.getLocalName()) && polygon == null) {
+                polygon = parsePolygon(r);
+            } else {
+                skipElement(r);
+            }
+        }
+        return polygon;
+    }
+
+    /** Reader is ON {@code <gml:Polygon>}. Returns list of rings: [exterior, hole, hole, …]. */
+    private List<List<double[]>> parsePolygon(XMLStreamReader r) throws XMLStreamException {
+        List<List<double[]>> rings = new ArrayList<>();
+        while (r.hasNext()) {
+            int ev = r.next();
+            if (ev == XMLStreamConstants.END_ELEMENT) break;
+            if (ev != XMLStreamConstants.START_ELEMENT) continue;
+            switch (r.getLocalName()) {
+                case "exterior", "interior" -> {
+                    List<double[]> ring = parseRingContainer(r);
+                    if (ring != null && ring.size() >= 4) rings.add(ring);
+                }
+                default -> skipElement(r);
+            }
+        }
+        return rings.isEmpty() ? null : rings;
+    }
+
+    /** Reader is ON {@code <gml:exterior>} or {@code <gml:interior>}. */
+    private List<double[]> parseRingContainer(XMLStreamReader r) throws XMLStreamException {
+        List<double[]> ring = null;
+        while (r.hasNext()) {
+            int ev = r.next();
+            if (ev == XMLStreamConstants.END_ELEMENT) break;
+            if (ev != XMLStreamConstants.START_ELEMENT) continue;
+            if ("LinearRing".equals(r.getLocalName())) {
+                ring = parseLinearRing(r);
+            } else {
+                skipElement(r);
+            }
+        }
+        return ring;
+    }
+
+    /** Reader is ON {@code <gml:LinearRing>}. */
+    private List<double[]> parseLinearRing(XMLStreamReader r) throws XMLStreamException {
+        List<double[]> points = new ArrayList<>();
+        while (r.hasNext()) {
+            int ev = r.next();
+            if (ev == XMLStreamConstants.END_ELEMENT) break;
+            if (ev != XMLStreamConstants.START_ELEMENT) continue;
+            switch (r.getLocalName()) {
+                case "posList" -> points.addAll(parsePosList(r.getElementText()));
+                case "pos"     -> {
+                    double[] p = parsePosPair(r.getElementText());
+                    if (p != null) points.add(p);
+                }
+                default -> skipElement(r);
+            }
+        }
+        return points;
+    }
+
+    private double[] parsePosPair(String text) {
+        String[] parts = text.trim().split("\\s+");
+        if (parts.length < 2) return null;
+        try {
+            return new double[]{Double.parseDouble(parts[0]), Double.parseDouble(parts[1])};
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private List<double[]> parsePosList(String text) {
+        String[] parts = text.trim().split("\\s+");
+        List<double[]> points = new ArrayList<>(parts.length / 2);
+        for (int i = 0; i + 1 < parts.length; i += 2) {
+            try {
+                points.add(new double[]{
+                    Double.parseDouble(parts[i]),
+                    Double.parseDouble(parts[i + 1])
+                });
+            } catch (NumberFormatException ignored) {}
+        }
+        return points;
+    }
+
+    // =========================================================================
+    // S-JTSK polygons → WGS84 MULTIPOLYGON WKT
+    // =========================================================================
+
+    private record EnvelopedWkt(String wkt,
+                                double minLat, double minLon,
+                                double maxLat, double maxLon) {}
+
+    /**
+     * Converts a list of S-JTSK polygons (each polygon = list of rings, each
+     * ring = list of [x, y]) to a single MULTIPOLYGON WKT string in WGS84,
+     * along with the WGS84 envelope of all vertices.
+     *
+     * Returns null if no valid polygon can be built.
+     */
+    private static EnvelopedWkt buildMultiPolygonWkt(
+            List<List<List<double[]>>> sjtskPolygons) {
+
+        StringBuilder sb = new StringBuilder("MULTIPOLYGON(");
+        boolean firstPoly = true;
+        double minLat = Double.POSITIVE_INFINITY, maxLat = Double.NEGATIVE_INFINITY;
+        double minLon = Double.POSITIVE_INFINITY, maxLon = Double.NEGATIVE_INFINITY;
+
+        for (List<List<double[]>> polygon : sjtskPolygons) {
+            if (polygon == null || polygon.isEmpty()) continue;
+            // require at least one ring with 4+ points
+            boolean polyOk = false;
+            for (List<double[]> ring : polygon) {
+                if (ring != null && ring.size() >= 4) { polyOk = true; break; }
+            }
+            if (!polyOk) continue;
+
+            if (!firstPoly) sb.append(",");
+            firstPoly = false;
+            sb.append("(");
+            boolean firstRing = true;
+            for (List<double[]> ring : polygon) {
+                if (ring == null || ring.size() < 4) continue;
+                if (!firstRing) sb.append(",");
+                firstRing = false;
+                sb.append("(");
+                boolean firstPoint = true;
+                for (double[] sjtsk : ring) {
+                    double[] wgs = SjtskToWgs84.convert(sjtsk[0], sjtsk[1]);
+                    double lat = wgs[0], lon = wgs[1];
+                    if (lat < minLat) minLat = lat;
+                    if (lat > maxLat) maxLat = lat;
+                    if (lon < minLon) minLon = lon;
+                    if (lon > maxLon) maxLon = lon;
+                    if (!firstPoint) sb.append(",");
+                    firstPoint = false;
+                    // WKT uses (lon lat) for geographic coordinates
+                    sb.append(lon).append(' ').append(lat);
+                }
+                sb.append(")");
+            }
+            sb.append(")");
+        }
+        sb.append(")");
+        if (firstPoly) return null;   // no polygon was emitted
+        return new EnvelopedWkt(sb.toString(), minLat, minLon, maxLat, maxLon);
     }
 }

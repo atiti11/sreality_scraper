@@ -12,6 +12,8 @@
 --   ruian_metadata    RUIAN snapshot freshness tracking
 -- =============================================================================
 
+CREATE EXTENSION IF NOT EXISTS postgis;
+
 -- ---------------------------------------------------------------------------
 -- Geography dimensions (Kraj → Okres → Obec → CastObce)
 -- ---------------------------------------------------------------------------
@@ -44,14 +46,17 @@ CREATE TABLE IF NOT EXISTS dim_cast_obce (
     kod_cast_obce     VARCHAR(20)  NOT NULL UNIQUE,
     nazev_cast_obce   VARCHAR(100) NOT NULL,
     obec_id           INT          NOT NULL REFERENCES dim_obec(id),
-    -- Bounding box in WGS84 (from RUIAN DefinicniBod + polygon envelope)
+    -- Bounding box in WGS84 (envelope of polygon, kept for human queries)
     bbox_min_lat      NUMERIC(10,6),
     bbox_min_lon      NUMERIC(10,6),
     bbox_max_lat      NUMERIC(10,6),
     bbox_max_lon      NUMERIC(10,6),
-    -- Centroid (DefinicniBod from RUIAN) — used as tiebreaker when bbox overlaps
+    -- Centroid (DefinicniBod from RUIAN)
     centroid_lat      NUMERIC(10,6),
-    centroid_lon      NUMERIC(10,6)
+    centroid_lon      NUMERIC(10,6),
+    -- Authoritative boundary polygon (RUIAN <gml:MultiSurface> reprojected to WGS84).
+    -- This is what SpatialJoiner uses via ST_Contains.
+    geom              geometry(MultiPolygon, 4326)
 );
 
 -- Municipality succession: when obec A is merged into obec B,
@@ -682,6 +687,7 @@ CREATE INDEX IF NOT EXISTS idx_dim_obec_okres       ON dim_obec(okres_id);
 CREATE INDEX IF NOT EXISTS idx_dim_obec_active      ON dim_obec(is_active);
 CREATE INDEX IF NOT EXISTS idx_dim_cast_obec_bbox   ON dim_cast_obce(bbox_min_lat, bbox_max_lat, bbox_min_lon, bbox_max_lon);
 CREATE INDEX IF NOT EXISTS idx_dim_cast_obec_obec   ON dim_cast_obce(obec_id);
+CREATE INDEX IF NOT EXISTS idx_dim_cast_obec_geom   ON dim_cast_obce USING GIST (geom);
 
 -- CSU stats
 CREATE INDEX IF NOT EXISTS idx_fact_obec_stats_year ON fact_obec_stats(year);
