@@ -135,6 +135,19 @@ CREATE TABLE IF NOT EXISTS fact_obec_stats (
 );
 
 -- ---------------------------------------------------------------------------
+-- Pipeline state — cross-run bookmarks (e.g. last enricher run timestamp)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS pipeline_state (
+    state_key   VARCHAR(50)  PRIMARY KEY,
+    state_value TEXT,
+    updated_at  TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+
+INSERT INTO pipeline_state (state_key, state_value)
+VALUES ('last_enrich_run_at', '1970-01-01T00:00:00Z')
+ON CONFLICT (state_key) DO NOTHING;
+
+-- ---------------------------------------------------------------------------
 -- RUIAN metadata — single-row freshness tracker
 -- ---------------------------------------------------------------------------
 

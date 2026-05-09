@@ -73,4 +73,14 @@ public class InitialEnricher extends EnricherLoader {
         }
         return LocalDate.now();
     }
+
+    /**
+     * Initial-load backfill: insert closed SCD rows for estates that are inactive
+     * and have no open row in Postgres yet (i.e. estates that disappeared during
+     * the original scraper's runs but predate any Postgres write).
+     */
+    @Override
+    protected boolean insertHistoricalInactive() {
+        return true;
+    }
 }

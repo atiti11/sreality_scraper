@@ -1,7 +1,5 @@
 package com.sreality.pipeline.scraper;
 
-import com.sreality.pipeline.scraper.db.PostgresLookup;
-import com.sreality.pipeline.shared.db.PostgresConnectionPool;
 import com.sreality.scraper.config.AppConfig;
 import com.sreality.scraper.db.MongoRepository;
 import com.sreality.scraper.http.SrealityHttpClient;
@@ -13,13 +11,12 @@ import org.slf4j.LoggerFactory;
 /**
  * JAR 1 entry point — pipeline-aware Sreality scraper.
  *
- * Differences from the original Main.java:
- *   - Opens a Postgres connection for change detection (no more touchLastSeen)
- *   - Uses PipelineEstateScraper instead of EstateScraper
- *   - MongoDB is used only as a staging queue for changed/new estates
+ * Now uses MongoDB exclusively for change detection (same as the cron scraper).
+ * Postgres is intentionally NOT touched here — all SCD writes go through
+ * jar4-enricher, which reads Mongo docs whose _updated_at bumped since the
+ * last enrichment run.
  *
- * Additional env vars vs original scraper:
- *   PG_HOST, PG_PORT, PG_DATABASE, PG_USERNAME, PG_PASSWORD, PG_SCHEMA
+ * Env vars: standard Mongo + Sreality + Telegram block; Postgres no longer needed.
  */
 public class ScraperMain {
 
@@ -30,21 +27,16 @@ public class ScraperMain {
         AppConfig config = AppConfig.fromEnv();
         log.info("Config: {}", config);
 
-        try (PostgresConnectionPool pg    = new PostgresConnectionPool();
-             MongoRepository        mongo = new MongoRepository(config);
-             SrealityHttpClient     http  = new SrealityHttpClient(config)) {
+        try (MongoRepository    mongo = new MongoRepository(config);
+             SrealityHttpClient http  = new SrealityHttpClient(config)) {
 
-            PostgresLookup        pgLookup = new PostgresLookup(pg);
-            PipelineEstateScraper scraper  = new PipelineEstateScraper(
-                config, http, mongo, pgLookup);
+            PipelineEstateScraper scraper = new PipelineEstateScraper(config, http, mongo);
 
             scraper.run();
             ScrapeRunReport report = scraper.getLastReport();
 
-            // Save run report to MongoDB scrape_runs collection
             mongo.saveReport(report);
 
-            // Telegram notification — matches real TelegramNotifier(token, chatId) constructor
             new TelegramNotifier(config.telegramBotToken, config.telegramChatId)
                 .sendReport(report);
 

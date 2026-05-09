@@ -389,31 +389,94 @@ public class MongoRepository implements AutoCloseable {
      * Marks all estates in a collection as inactive if they were not seen
      * since the given runStartedAt timestamp.
      * Called after each category is fully scraped.
+     *
+     * Sets:
+     *   - active=false
+     *   - _inactive_since=now (when we noticed they're gone)
+     *   - _updated_at=now (so jar4-enricher picks up the change as a delta)
+     *
      * Returns the number of estates marked inactive.
      */
     public long markInactiveNotSeenSince(String collectionName, String runStartedAt) {
         MongoCollection<Document> col = collection(collectionName);
+        String now = Instant.now().toString();
         var result = col.updateMany(
             Filters.and(
                 Filters.eq("active", true),
                 Filters.lt("_last_seen_at", runStartedAt)
             ),
-            Updates.set("active", false)
+            Updates.combine(
+                Updates.set("active", false),
+                Updates.set("_inactive_since", now),
+                Updates.set("_updated_at", now)
+            )
         );
         return result.getModifiedCount();
     }
 
     /**
-     * Updates only _last_seen_at for an estate that was skipped (hash unchanged).
-     * This allows tracking which estates are no longer appearing in sreality results
-     * by querying: db.<col>.find({_last_seen_at: {$lt: <date>}})
+     * Updates _last_seen_at for an estate seen in the listing this run.
+     * Two paths depending on the doc's current state:
+     *   - Was active=true (or no flag): just bump _last_seen_at, do NOT touch
+     *     _updated_at (no Postgres change needed; SCD row is already correct).
+     *   - Was active=false (rebirth): bump _last_seen_at + flip active=true +
+     *     bump _updated_at + clear _inactive_since. The enricher will see this
+     *     delta and INSERT a new open SCD row in Postgres.
+     *
+     * @return true if this was a rebirth (active flipped false-&gt;true)
      */
-    public void touchLastSeen(String collectionName, long hashId) {
+    public boolean touchLastSeen(String collectionName, long hashId) {
         MongoCollection<Document> col = collection(collectionName);
+        String now = Instant.now().toString();
+
+        Document existing = col.find(Filters.eq("hash_id", hashId))
+            .projection(new Document("active", 1).append("_id", 0))
+            .first();
+        if (existing == null) return false;
+
+        boolean wasInactive = Boolean.FALSE.equals(existing.getBoolean("active"));
+        if (wasInactive) {
+            col.updateOne(
+                Filters.eq("hash_id", hashId),
+                Updates.combine(
+                    Updates.set("_last_seen_at", now),
+                    Updates.set("active", true),
+                    Updates.set("_updated_at", now),
+                    Updates.unset("_inactive_since")
+                )
+            );
+            return true;
+        }
         col.updateOne(
             Filters.eq("hash_id", hashId),
-            Updates.set("_last_seen_at", Instant.now().toString())
+            Updates.set("_last_seen_at", now)
         );
+        return false;
+    }
+
+    /**
+     * Iterable over all docs in {@code collectionName} whose {@code _updated_at}
+     * is &gt;= {@code sinceIso} (ISO-8601 timestamp string). Used by jar4-enricher
+     * to read only the delta since the last enrichment run.
+     */
+    public com.mongodb.client.FindIterable<Document> findUpdatedSince(
+            String collectionName, String sinceIso) {
+        return collection(collectionName)
+            .find(Filters.gte("_updated_at", sinceIso))
+            .batchSize(500);
+    }
+
+    /**
+     * Deletes docs whose {@code _last_seen_at} is older than {@code cutoffIso}.
+     * Used to enforce the 7-day Mongo TTL: estates not seen in any listing scrape
+     * during the past week are removed (Postgres still has their SCD history).
+     *
+     * @return the number of documents deleted
+     */
+    public long deleteStaleDocs(String collectionName, String cutoffIso) {
+        MongoCollection<Document> col = collection(collectionName);
+        var result = col.deleteMany(Filters.lt("_last_seen_at", cutoffIso));
+        return result.getDeletedCount();
     }
 
     /**

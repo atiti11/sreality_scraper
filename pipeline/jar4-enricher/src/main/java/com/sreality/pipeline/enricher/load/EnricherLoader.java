@@ -56,12 +56,41 @@ public class EnricherLoader {
         return LocalDate.now();
     }
 
+    /**
+     * Default: read Mongo's {@code _inactive_since}, fall back to {@code _last_seen_at}
+     * when inactive; null when still active. {@link InitialEnricher} keeps the same
+     * semantics for the one-time historical load.
+     */
     protected LocalDate resolveValidTo(Document doc) {
-        return null;
+        if (resolveIsActive(doc)) return null;
+        String ts = doc.getString("_inactive_since");
+        if (ts == null) ts = doc.getString("_last_seen_at");
+        if (ts != null && ts.length() >= 10) {
+            try { return LocalDate.parse(ts.substring(0, 10)); }
+            catch (Exception ignored) {}
+        }
+        return LocalDate.now();
     }
 
+    /**
+     * Default: read Mongo's {@code active} field. Missing flag is treated as
+     * active=true (back-compat with old docs). Only an explicit {@code false}
+     * marks the estate inactive.
+     */
     protected boolean resolveIsActive(Document doc) {
-        return true;
+        Boolean active = doc.getBoolean("active");
+        return !Boolean.FALSE.equals(active);
+    }
+
+    /**
+     * Whether an inactive doc with no open SCD row in Postgres should still be
+     * inserted as a closed historical record. Default {@code false} (regular
+     * pipeline ignores already-closed estates). {@link InitialEnricher} overrides
+     * to {@code true} so the one-time backfill creates closed SCD rows for the
+     * full historical lifespan of every Mongo doc.
+     */
+    protected boolean insertHistoricalInactive() {
+        return false;
     }
 
     // =========================================================================
@@ -87,14 +116,39 @@ public class EnricherLoader {
             annotateGeoResolution(doc, geo);
             Integer agencyId = upsertAgency(doc);
             long contentHash = computeFullHash(doc);
-            Long existingHash = getCurrentHash(table, hashId);
+            Long existingHash = getCurrentHash(table, hashId);   // open SCD row's content_hash, or null
+            boolean isActive = resolveIsActive(doc);
+            LocalDate validFrom = resolveValidFrom(doc);
 
+            // ---- Case A: estate is currently inactive (Mongo says active=false) ----
+            if (!isActive) {
+                if (existingHash == null) {
+                    // No open SCD row.
+                    if (!insertHistoricalInactive()) {
+                        // Regular pipeline: nothing to do.
+                        return WriteResult.SKIPPED;
+                    }
+                    // Initial-load backfill: insert closed historical SCD row.
+                    LocalDate validTo = resolveValidTo(doc);
+                    insertFactRow(table, propertyType, dealType, doc,
+                            hashId, contentHash, geo, agencyId, validFrom, validTo, false);
+                    upsertDetail(hashId, doc);
+                    return WriteResult.INSERTED;
+                }
+                // Has open SCD row — close it (and mark is_active=false).
+                LocalDate closeOn = resolveValidTo(doc);
+                if (closeOn == null) closeOn = validFrom;
+                closeAndDeactivate(table, hashId, closeOn);
+                upsertDetail(hashId, doc);
+                return WriteResult.UPDATED;
+            }
+
+            // ---- Case B: estate is active and content unchanged ----
             if (existingHash != null && existingHash == contentHash)
                 return WriteResult.SKIPPED;
 
-            LocalDate validFrom = resolveValidFrom(doc);
-            LocalDate validTo = resolveValidTo(doc);
-            boolean isActive = resolveIsActive(doc);
+            // ---- Case C: active + (new or content changed or rebirth) ----
+            LocalDate validTo = resolveValidTo(doc);   // null for active path
 
             Map<String, String> oldValues = Collections.emptyMap();
             if (existingHash != null) {
@@ -189,6 +243,22 @@ public class EnricherLoader {
 
     private void closeCurrentRow(String table, long hashId, LocalDate closeDate) throws SQLException {
         String sql = "UPDATE " + pg.t(table) + " SET valid_to=? WHERE hash_id=? AND valid_to IS NULL";
+        try (Connection c = pg.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setDate(1, Date.valueOf(closeDate));
+            ps.setLong(2, hashId);
+            ps.execute();
+        }
+    }
+
+    /**
+     * Closes the open SCD row AND marks it inactive. Used when scraper signalled
+     * that the estate disappeared from Sreality (Mongo {@code active=false}).
+     * No new row is inserted — the estate is gone.
+     */
+    private void closeAndDeactivate(String table, long hashId, LocalDate closeDate) throws SQLException {
+        String sql = "UPDATE " + pg.t(table)
+                + " SET valid_to=?, is_active=false"
+                + " WHERE hash_id=? AND valid_to IS NULL";
         try (Connection c = pg.getConnection(); PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setDate(1, Date.valueOf(closeDate));
             ps.setLong(2, hashId);

@@ -1,8 +1,6 @@
 package com.sreality.pipeline.scraper;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.sreality.pipeline.scraper.db.PostgresLookup;
-import com.sreality.pipeline.shared.model.ContentHasher;
 import com.sreality.scraper.config.AppConfig;
 import com.sreality.scraper.config.CategoryConfig;
 import com.sreality.scraper.db.MongoRepository;
@@ -15,23 +13,31 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 
 /**
- * Pipeline-aware scraper. Replaces the original EstateScraper with a version
- * that uses Postgres for change detection instead of MongoDB content hashes.
+ * Pipeline scraper. Same logic as the original {@code EstateScraper} (cron mode):
+ * MongoDB is the cache for change detection. After each category sweep, estates
+ * not seen in this run are marked inactive in Mongo, and docs older than 7 days
+ * since their last sighting are pruned from Mongo entirely.
  *
- * MongoDB is now a pure download queue — only changed/new estates are written
- * there. The enricher (JAR 4) drains it and deletes documents after Postgres write.
+ * Postgres is intentionally NOT touched here. All Postgres updates flow through
+ * jar4-enricher, which reads docs whose {@code _updated_at} bumped since the last
+ * enrichment run and applies the delta as SCD writes.
  *
  * Per-category flow:
- *   1. Load (hash_id → content_hash) from matching Postgres fact table
- *   2. Fetch all listing pages from Sreality API
- *   3. Per estate: compute listing hash → compare → skip or fetch detail + write Mongo
- *   4. After full scan: mark inactive in Postgres any hash_id not seen in API
+ *   1. Fetch listing pages from Sreality
+ *   2. For each estate:
+ *      a) compute listing-content-hash (price + name + listing labels via
+ *         {@link EstateDocumentBuilder#computeContentHash})
+ *      b) {@code mongo.isUnchanged} → SKIP detail fetch, just touch _last_seen_at
+ *         (rebirth handling: if the doc was inactive, _updated_at also bumps)
+ *      c) hash differs OR doc was corrupted → fetch detail + upsert to Mongo
+ *   3. After the full category: mark estates not seen as inactive
+ *      (sets active=false, _inactive_since=now, _updated_at=now)
+ *   4. Cleanup: delete Mongo docs whose _last_seen_at &lt; now − 7 days
  */
 public class PipelineEstateScraper {
 
@@ -40,18 +46,18 @@ public class PipelineEstateScraper {
     private static final int[] CATEGORY_MAIN_CBS = {1, 2, 3, 4, 5};
     private static final int[] CATEGORY_TYPE_CBS = {1, 2, 3};
 
+    /** TTL for inactive Mongo docs — once {@code now − _last_seen_at &gt; this}, the doc is dropped. */
+    private static final int MONGO_TTL_DAYS = 7;
+
     private final AppConfig          config;
     private final SrealityHttpClient http;
     private final MongoRepository    mongo;
-    private final PostgresLookup     pgLookup;
     private       ScrapeRunReport    lastReport;
 
-    public PipelineEstateScraper(AppConfig config, SrealityHttpClient http,
-                                  MongoRepository mongo, PostgresLookup pgLookup) {
-        this.config   = config;
-        this.http     = http;
-        this.mongo    = mongo;
-        this.pgLookup = pgLookup;
+    public PipelineEstateScraper(AppConfig config, SrealityHttpClient http, MongoRepository mongo) {
+        this.config = config;
+        this.http   = http;
+        this.mongo  = mongo;
     }
 
     public void run() {
@@ -69,8 +75,9 @@ public class PipelineEstateScraper {
         }
         report.finish(false);
         this.lastReport = report;
-        log.info("=== Pipeline scrape run finished: processed={} upserted={} skipped={} ===",
-            report.totalProcessed, report.totalUpserted, report.totalSkipped);
+        log.info("=== Pipeline scrape run finished — processed={} upserted={} skipped={} inactive={} ===",
+                report.totalProcessed, report.totalUpserted, report.totalSkipped,
+                report.totalMarkedInactive);
     }
 
     public ScrapeRunReport getLastReport() { return lastReport; }
@@ -87,16 +94,12 @@ public class PipelineEstateScraper {
         String collectionName = CategoryConfig.collectionName(cm, ct);
         log.info("--- {} {} ---", propertyType, dealType);
 
-        // Load current Postgres state for this category
-        Map<Long, Long> pgHashes = pgLookup.loadCurrentHashes(propertyType, dealType);
-        Set<Long> knownIds = new HashSet<>(pgHashes.keySet());
-        Set<Long> seenIds  = new HashSet<>();
-
         int totalCount;
         try {
             totalCount = fetchTotalCount(cm, ct);
         } catch (IOException e) {
             log.error("Count fetch failed for {}/{}: {}", cm, ct, e.getMessage());
+            report.totalListingErrors++;
             return;
         }
         if (totalCount == 0) { log.info("No estates found."); return; }
@@ -105,18 +108,25 @@ public class PipelineEstateScraper {
         log.info("Total: {}, pages: {}", totalCount, totalPages);
 
         for (int page = 1; page <= totalPages; page++) {
-            fetchAndProcessPage(cm, ct, page, collectionName, pgHashes, seenIds, report);
+            fetchAndProcessPage(cm, ct, page, collectionName, report);
             sleep();
         }
 
-        int inactive = pgLookup.markInactiveBatch(propertyType, dealType, seenIds, knownIds);
-        report.totalMarkedInactive += inactive;
-        log.info("{} {} done — queued={} skipped={} inactive={}",
-            propertyType, dealType, report.totalUpserted, report.totalSkipped, inactive);
+        // Mark estates not seen in this run as inactive (also bumps _updated_at).
+        long markedInactive = mongo.markInactiveNotSeenSince(collectionName, report.startedAt);
+        report.totalMarkedInactive += markedInactive;
+
+        // Drop docs the scraper hasn't seen for over MONGO_TTL_DAYS days.
+        String cutoff = Instant.now().minus(MONGO_TTL_DAYS, ChronoUnit.DAYS)
+                .atOffset(ZoneOffset.UTC).toInstant().toString();
+        long pruned = mongo.deleteStaleDocs(collectionName, cutoff);
+
+        log.info("{} {} done — upserted={} skipped={} inactive={} pruned={}",
+                propertyType, dealType, report.totalUpserted, report.totalSkipped,
+                markedInactive, pruned);
     }
 
     private void fetchAndProcessPage(int cm, int ct, int page, String collection,
-                                      Map<Long, Long> pgHashes, Set<Long> seenIds,
                                       ScrapeRunReport report) {
         String url = config.srealityBaseUrl
             + "?category_main_cb=" + cm
@@ -129,7 +139,7 @@ public class PipelineEstateScraper {
             JsonNode estates  = response.path("_embedded").path("estates");
             if (!estates.isArray()) return;
             for (JsonNode estate : estates) {
-                processEstate(estate, collection, pgHashes, seenIds, report);
+                processEstate(estate, collection, report);
                 report.totalProcessed++;
             }
         } catch (IOException e) {
@@ -138,38 +148,36 @@ public class PipelineEstateScraper {
         }
     }
 
-    private void processEstate(JsonNode node, String collection,
-                                Map<Long, Long> pgHashes, Set<Long> seenIds,
-                                ScrapeRunReport report) {
-        long hashId = node.path("hash_id").asLong();
+    private void processEstate(JsonNode estateNode, String collectionName, ScrapeRunReport report) {
+        long hashId = estateNode.path("hash_id").asLong();
         if (hashId == 0) return;
-        seenIds.add(hashId);
 
-        // Quick hash from listing fields only (price + name as signal)
-        long apiHash = computeListingHash(node);
-        Long pgHash  = pgHashes.get(hashId);
-        if (pgHash != null && pgHash == apiHash) {
+        // Listing-content hash (price + name + listing labels).
+        // Identical to the cron scraper's hash so both can share the same Mongo.
+        String contentHash = EstateDocumentBuilder.computeContentHash(estateNode);
+
+        // Fast path: doc already in Mongo with same hash AND not corrupted.
+        if (mongo.isUnchanged(collectionName, hashId, contentHash)) {
             report.totalSkipped++;
+            // touchLastSeen returns true if the doc was inactive (=> rebirth);
+            // in that case it also bumps _updated_at and clears _inactive_since,
+            // so the next enricher run opens a fresh SCD row in Postgres.
+            mongo.touchLastSeen(collectionName, hashId);
             return;
         }
 
-        // Changed or new — fetch detail and queue in MongoDB
-        JsonNode detail = fetchDetail(hashId, collection, pgHash != null, report);
-        Document doc    = EstateDocumentBuilder.build(node, detail);
-        // Store the listing-time hash so enricher knows a full recompute is needed
-        doc.append("_pipeline_content_hash", apiHash);
-        mongo.upsert(collection, doc);
-        report.totalUpserted++;
-    }
+        boolean wasExisting = mongo.exists(collectionName, hashId);
+        if (wasExisting && mongo.isCorrupted(collectionName, hashId)) {
+            log.info("Repairing corrupted estate {} in {}", hashId, collectionName);
+            report.totalRepaired++;
+        }
 
-    /**
-     * Listing-time hash: uses price + name as a lightweight change signal.
-     * The enricher computes the definitive full hash from all detail fields.
-     */
-    private static long computeListingHash(JsonNode n) {
-        String price = String.valueOf(n.path("price_czk").path("value_raw").asLong());
-        String name  = n.path("name").asText("");
-        return ContentHasher.compute(price, null, null, null, null, name, null);
+        // Detail fetch + upsert. MongoRepository.upsert sets _updated_at=now,
+        // preserves _first_seen_at, increments _update_count, writes history delta.
+        JsonNode detail = fetchDetail(hashId, collectionName, wasExisting, report);
+        Document doc    = EstateDocumentBuilder.build(estateNode, detail);
+        mongo.upsert(collectionName, doc);
+        report.totalUpserted++;
     }
 
     private JsonNode fetchDetail(long hashId, String collection,
