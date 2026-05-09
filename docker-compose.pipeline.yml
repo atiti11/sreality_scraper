@@ -22,6 +22,11 @@ x-airflow-env: &airflow-env
   AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW_FERNET_KEY:-}
   AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY:-changeme-secret}
   AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+  # Reverse proxy (Caddy) terminates TLS and forwards as HTTP; tell Airflow
+  # to honor X-Forwarded-* headers so redirects, cookie scope and links use HTTPS.
+  AIRFLOW__WEBSERVER__BASE_URL: ${AIRFLOW_BASE_URL:-http://localhost:8080}
+  AIRFLOW__WEBSERVER__ENABLE_PROXY_FIX: "True"
+  AIRFLOW__WEBSERVER__COOKIE_SECURE: "True"
   AIRFLOW__SCHEDULER__MAX_DAGRUNS_TO_CREATE_PER_LOOP: "2"
   AIRFLOW__SCHEDULER__PARSING_PROCESSES: "1"
   AIRFLOW__CORE__PARALLELISM: "4"

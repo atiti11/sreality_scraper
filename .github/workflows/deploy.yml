@@ -87,6 +87,7 @@ jobs:
       AIRFLOW_FERNET_KEY:      ${{ secrets.AIRFLOW_FERNET_KEY }}
       AIRFLOW_SECRET_KEY:      ${{ secrets.AIRFLOW_SECRET_KEY }}
       AIRFLOW_PASSWORD:        ${{ secrets.AIRFLOW_PASSWORD }}
+      AIRFLOW_BASE_URL:        ${{ vars.AIRFLOW_BASE_URL }}
       DEPLOY_PATH:             ${{ secrets.DEPLOY_PATH }}
       MONGO_HOST:              ${{ vars.MONGO_HOST }}
       MONGO_PORT:              ${{ vars.MONGO_PORT }}
@@ -145,7 +146,7 @@ jobs:
             SREALITY_BASE_URL,PER_PAGE,MAX_ESTATES,
             HTTP_CONNECT_TIMEOUT_MS,HTTP_READ_TIMEOUT_MS,REQUEST_DELAY_MS,
             TELEGRAM_BOT_TOKEN,TELEGRAM_CHAT_ID,
-            AIRFLOW_USER,AIRFLOW_PASSWORD,AIRFLOW_FERNET_KEY,AIRFLOW_SECRET_KEY,AIRFLOW_PORT,
+            AIRFLOW_USER,AIRFLOW_PASSWORD,AIRFLOW_FERNET_KEY,AIRFLOW_SECRET_KEY,AIRFLOW_PORT,AIRFLOW_BASE_URL,
             CSU_XLSX_URLS,CSU_YEAR,
             DEPLOY_PATH
           script: |
@@ -191,6 +192,7 @@ jobs:
             AIRFLOW_FERNET_KEY='${AIRFLOW_FERNET_KEY}'
             AIRFLOW_SECRET_KEY='${AIRFLOW_SECRET_KEY}'
             AIRFLOW_PORT='${AIRFLOW_PORT}'
+            AIRFLOW_BASE_URL='${AIRFLOW_BASE_URL}'
             CSU_XLSX_URLS='${CSU_XLSX_URLS}'
             CSU_YEAR='${CSU_YEAR}'
             ENVEOF
@@ -222,27 +224,84 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key:      ${{ secrets.DEPLOY_SSH_KEY }}
           envs: DEPLOY_PATH
+          # Long timeout because the airflow-init migration step can take a minute
+          # the first time and we wait for webserver health afterwards.
+          command_timeout: 15m
           script: |
             set -e
             cd "$DEPLOY_PATH"
+
+            COMPOSE="docker compose -f docker-compose.yml -f docker-compose.pipeline.yml"
 
             echo "=== JARs on server ==="
             ls -lh pipeline/jars/
             ls -lh initial-load/target/
 
-            # Original scraper + MongoDB
+            # ----- Original scraper + MongoDB -----
             docker compose -f docker-compose.yml build --no-cache scraper
             docker compose -f docker-compose.yml up -d mongodb
 
-            # Pipeline: Postgres + Airflow
-            docker compose -f docker-compose.yml -f docker-compose.pipeline.yml \
-              build --no-cache airflow-webserver airflow-scheduler airflow-init
-            docker compose -f docker-compose.yml -f docker-compose.pipeline.yml \
-              up -d postgres
-            docker compose -f docker-compose.yml -f docker-compose.pipeline.yml \
-              run --rm airflow-init
-            docker compose -f docker-compose.yml -f docker-compose.pipeline.yml \
-              up -d airflow-webserver airflow-scheduler
+            # ----- Postgres + Airflow images -----
+            $COMPOSE build --no-cache airflow-webserver airflow-scheduler airflow-init
+            $COMPOSE up -d postgres
+
+            # ----- Airflow DB migration (idempotent) -----
+            $COMPOSE run --rm airflow-init
+
+            # ----- Webserver + scheduler -----
+            $COMPOSE up -d airflow-webserver airflow-scheduler
+
+            # ----- Wait for webserver to report healthy -----
+            echo "Waiting for airflow-webserver to become healthy..."
+            for i in $(seq 1 60); do
+                STATUS=$(docker inspect --format='{{.State.Health.Status}}' \
+                    sreality-airflow-webserver 2>/dev/null || echo "starting")
+                if [ "$STATUS" = "healthy" ]; then
+                    echo "Webserver healthy after ${i}x5s"
+                    break
+                fi
+                if [ "$i" = "60" ]; then
+                    echo "ERROR: webserver did not become healthy in 5 minutes"
+                    docker logs sreality-airflow-webserver --tail 80
+                    exit 1
+                fi
+                sleep 5
+            done
+
+            # ----- Wait for scheduler to parse the DAGs folder -----
+            echo "Waiting for scheduler to parse DAGs..."
+            for i in $(seq 1 30); do
+                if docker exec sreality-airflow-scheduler airflow dags list 2>/dev/null \
+                    | grep -q "sreality_pipeline"; then
+                    echo "DAG sreality_pipeline registered after ${i}x5s"
+                    break
+                fi
+                if [ "$i" = "30" ]; then
+                    echo "WARN: sreality_pipeline DAG not registered after 2.5 minutes"
+                    docker logs sreality-airflow-scheduler --tail 50
+                    # Don't fail the deploy — DAG file might just be missing or have parse error
+                fi
+                sleep 5
+            done
+
+            # ----- Auto-unpause sreality_pipeline so the 12h schedule kicks in -----
+            docker exec sreality-airflow-scheduler airflow dags unpause sreality_pipeline \
+                || echo "WARN: could not unpause sreality_pipeline (will need to be done manually in UI)"
+
+            # ----- Final status summary -----
+            echo ""
+            echo "=== Container status ==="
+            $COMPOSE ps
+
+            echo ""
+            echo "=== DAGs ==="
+            docker exec sreality-airflow-scheduler airflow dags list 2>/dev/null \
+                | grep -E "dag_id|sreality|csu" || true
+
+            echo ""
+            echo "=== Health endpoint ==="
+            curl -s http://127.0.0.1:8080/health | head -c 500 || echo "webserver not reachable on 127.0.0.1:8080"
+            echo ""
 
       - name: Notify Telegram
         if: always()
