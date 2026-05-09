@@ -148,6 +148,8 @@ services:
     command: scheduler
     networks:
       - scraper-net
-    # Raised from 500m — scheduler hits 93 % at idle, would OOM during DAG
-    # parsing or while orchestrating BashOperator-launched JAR tasks.
-    mem_limit: 700m
+    # Scheduler hosts Java JARs spawned by BashOperator (jar1…jar5). Each JAR
+    # uses -Xmx512m heap + ~200-300m JVM overhead, plus scheduler itself ~350m.
+    # 700m caused OOM-kill (137) during jar3-csu. 1500m gives comfortable
+    # headroom; 4 GB host has the budget.
+    mem_limit: 1500m
