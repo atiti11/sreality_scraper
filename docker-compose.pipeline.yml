@@ -124,13 +124,15 @@ services:
     command: webserver
     networks:
       - scraper-net
-    mem_limit: 400m
+    # Raised from 400m — Flask login screen + all loaded modules need ~600 MB.
+    # 400m caused OOM-kill of gunicorn workers on /login (502 to client).
+    mem_limit: 700m
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 30s
+      start_period: 60s
 
   airflow-scheduler:
     build:
@@ -146,4 +148,6 @@ services:
     command: scheduler
     networks:
       - scraper-net
-    mem_limit: 500m
+    # Raised from 500m — scheduler hits 93 % at idle, would OOM during DAG
+    # parsing or while orchestrating BashOperator-launched JAR tasks.
+    mem_limit: 700m
