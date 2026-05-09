@@ -14,13 +14,14 @@ COPY --from=java /opt/java/openjdk /opt/java/openjdk
 ENV JAVA_HOME=/opt/java/openjdk
 ENV PATH="$JAVA_HOME/bin:$PATH"
 
-# Ensure curl is installed (used by RuianDownloader for large file downloads)
+# curl  — used to download RUIAN/CSU files in DAG bash tasks
+# unzip — used to extract RUIAN VFR zip after download
 RUN apt-get update \
- && apt-get install -y --no-install-recommends curl \
+ && apt-get install -y --no-install-recommends curl unzip \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
 
-# Verify both are available
-RUN java -version && curl --version
+# Verify all three are available
+RUN java -version && curl --version && unzip -v | head -1
 
 USER airflow
