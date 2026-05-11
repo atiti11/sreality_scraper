@@ -85,19 +85,17 @@ const LEVEL_LABELS: Record<MapLevel, string> = {
   cast_obce: "Localities",
 };
 
-// Sequential ramp from light emerald → deep teal. Five evenly spaced stops
-// so the colour gradient stays smooth across the p10..p90 of values.
-//
-// The lowest stop is emerald-100 rather than emerald-50: -50 is so close
-// to white that low-price regions visually blended with the dedicated
-// "no data" grey, making it hard to tell whether a region had cheap
-// listings or none at all.
+// Sequential heatmap ramp: pale yellow (cheap) → deep red (expensive).
+// Adapted from ColorBrewer's YlOrRd; the lightest stop is shifted a touch
+// more saturated than the canonical ``#ffffb2`` so low-price regions stay
+// visually distinct from the dedicated "no data" grey instead of fading
+// into off-white.
 const PALETTE: [number, number, number][] = [
-  [209, 250, 229],  // emerald-100  (was emerald-50, indistinguishable from grey)
-  [167, 243, 208],  // emerald-200
-  [110, 231, 183],  // emerald-300
-  [16,  185, 129],  // emerald-500
-  [6,    78, 59],   // emerald-900
+  [254, 240, 142],  // pale yellow      (lowest)
+  [254, 204,  92],  // yellow-orange
+  [253, 141,  60],  // orange
+  [240,  59,  32],  // red-orange
+  [189,   0,  38],  // deep red         (highest)
 ];
 
 // Dedicated colour for regions that have zero listings under the active
@@ -118,15 +116,30 @@ function colourFor(value: number, lo: number, hi: number): string {
   return `rgb(${ch(0)}, ${ch(1)}, ${ch(2)})`;
 }
 
-function clipBounds(values: (number | null)[]): [number, number] {
-  const sorted = values
-    .filter((v): v is number => Number.isFinite(v as number))
-    .sort((a, b) => a - b);
-  if (sorted.length === 0) return [0, 1];
-  return [
-    sorted[Math.floor(sorted.length * 0.1)],
-    sorted[Math.floor(sorted.length * 0.9)] || sorted[sorted.length - 1],
-  ];
+/**
+ * Min / max of the finite values on the visible map. Used to both anchor
+ * the colour gradient and label the legend, so the swatch under the
+ * cursor always matches the legend's numeric range.
+ *
+ * Earlier versions of this code clipped to the p10..p90 range so a
+ * single Prague-sized outlier wouldn't compress the rest of the
+ * gradient. That made the legend lie about what was on screen — it
+ * said "83k" while Prague was actually 159k. With only ~14 kraje there's
+ * not enough data to safely percentile-clip anyway, so we use the
+ * absolute extrema and accept that an outlier visually dominates: when
+ * Prague is genuinely 2× the rest, the map should say so.
+ */
+function valueBounds(values: (number | null)[]): [number, number] {
+  let lo = Number.POSITIVE_INFINITY;
+  let hi = Number.NEGATIVE_INFINITY;
+  for (const v of values) {
+    if (!Number.isFinite(v as number)) continue;
+    const n = v as number;
+    if (n < lo) lo = n;
+    if (n > hi) hi = n;
+  }
+  if (!Number.isFinite(lo) || !Number.isFinite(hi)) return [0, 1];
+  return [lo, hi];
 }
 
 export function MapView() {
@@ -248,7 +261,7 @@ export function MapView() {
   // -- Compute colour scale from the visible features.
   const palette = useMemo(() => {
     if (!data) return { lo: 0, hi: 1 };
-    const [lo, hi] = clipBounds(data.features.map((f) => f.properties.avg_per_m2));
+    const [lo, hi] = valueBounds(data.features.map((f) => f.properties.avg_per_m2));
     return { lo, hi };
   }, [data]);
 

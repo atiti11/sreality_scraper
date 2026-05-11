@@ -96,6 +96,10 @@ export interface PriceChange {
 export interface Listing {
   property_type: PropertyType;
   hash_id: number;
+  /** Server-synthesised label, e.g. "Apartment 2+1, 65 m²" or "House, 220 m²". */
+  title: string;
+  /** Apartments only (e.g. "1+kk", "2+1"); null elsewhere. */
+  sub_category: string | null;
   price: number | null;
   per_m2: number | null;
   area: number | null;

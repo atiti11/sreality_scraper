@@ -55,6 +55,7 @@ public final class Listings {
                 "SELECT f.property_type,\n" +
                 "       f.hash_id,\n" +
                 "       f.price, f.per_m2, f.area,\n" +
+                "       f.sub_category,\n" +
                 "       f.first_seen_date,\n" +
                 "       f.sreality_url     AS url,\n" +
                 "       o.nazev_obce       AS obec,\n" +
@@ -84,13 +85,19 @@ public final class Listings {
                         long hashId = rs.getLong("hash_id");
                         String obec = rs.getString("obec");
                         String castObce = rs.getString("cast_obce");
+                        String subCategory = rs.getString("sub_category");
+                        Double area = nullable(rs, "area");
 
                         Map<String, Object> r = new LinkedHashMap<>();
                         r.put("property_type", propertyTypeToken);
                         r.put("hash_id",       hashId);
+                        // Human-readable primary identifier for the
+                        // listings table. Format: "<Type> <subcat?>, <area> m²".
+                        r.put("title",         buildTitle(propertyTypeToken, subCategory, area));
+                        r.put("sub_category",  subCategory);
                         r.put("price",         nullableLong(rs, "price"));
                         r.put("per_m2",        nullable(rs, "per_m2"));
-                        r.put("area",          nullable(rs, "area"));
+                        r.put("area",          area);
                         java.sql.Date fsd = rs.getDate("first_seen_date");
                         r.put("first_seen_date", fsd == null ? null : fsd.toString());
                         r.put("url",           SrealityUrl.build(
@@ -204,6 +211,30 @@ public final class Listings {
     // ------------------------------------------------------------------------
     // Small helpers
     // ------------------------------------------------------------------------
+
+    /**
+     * Synthesise a human-readable title for a listing row. The dashboard
+     * doesn't store the sreality advert headline, so we build something
+     * like {@code "Apartment 2+1, 65 m²"} from the columns we do have.
+     * sub_category is only populated for apartment tables.
+     */
+    private static String buildTitle(String propertyType, String subCategory, Double area) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(switch (propertyType == null ? "" : propertyType) {
+            case "apartment"  -> "Apartment";
+            case "house"      -> "House";
+            case "land"       -> "Land";
+            case "commercial" -> "Commercial space";
+            default           -> "Listing";
+        });
+        if (subCategory != null && !subCategory.isBlank()) {
+            sb.append(' ').append(subCategory.trim());
+        }
+        if (area != null && Double.isFinite(area) && area > 0) {
+            sb.append(", ").append(Math.round(area)).append(" m²");
+        }
+        return sb.toString();
+    }
 
     private static int bind(PreparedStatement ps, int idx, Object value) throws Exception {
         if (value instanceof Integer i) ps.setInt(idx, i);

@@ -125,7 +125,7 @@ export function ListingsTable() {
             <thead>
               <tr className="border-b text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                 <Th>Type</Th>
-                <Th>Location</Th>
+                <Th>Listing</Th>
                 <Th align="right">Area</Th>
                 <Th align="right">Price</Th>
                 <Th align="right">Price / m²</Th>
@@ -145,9 +145,12 @@ export function ListingsTable() {
                     </Badge>
                   </Td>
                   <Td>
-                    <div className="font-medium">{r.obec ?? "—"}</div>
+                    {/* Synthesised name (e.g. "Apartment 2+1, 65 m²") is the
+                        row's primary identifier; the obec / okres / kraj
+                        chain sits under it as muted secondary context. */}
+                    <div className="font-medium">{r.title || "Listing"}</div>
                     <div className="text-xs text-muted-foreground">
-                      {[r.okres, r.kraj].filter(Boolean).join(" · ")}
+                      {[r.obec, r.okres, r.kraj].filter(Boolean).join(" · ") || "—"}
                     </div>
                   </Td>
                   <Td align="right">{area(r.area)}</Td>

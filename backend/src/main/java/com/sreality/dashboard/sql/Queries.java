@@ -30,48 +30,89 @@ public final class Queries {
 
     private Queries() {}
 
-    /** Per-(property × deal) fact-table configuration. */
+    /**
+     * Per-(property × deal) fact-table configuration.
+     *
+     * <p>{@code subCategoryCol} is the column that holds a short string
+     * like {@code "1+kk"} or {@code "2+1"}; only the three apartment
+     * tables expose it. When {@code null}, the facts CTE emits
+     * {@code NULL::TEXT AS sub_category} so the outer query schema stays
+     * uniform across all branches.</p>
+     */
     public record TableCfg(
         String table,
         String priceCol,
-        String perM2Col,      // null when the table doesn't expose it precomputed
-        String areaCol
+        String perM2Col,         // null when the table doesn't expose it precomputed
+        String areaCol,
+        String subCategoryCol    // null when the table has no sub_category column
     ) {
         /** SQL expression that yields price-per-m² for a row in this table. */
         public String perM2Expr() {
             if (perM2Col != null) return perM2Col;
             return "(" + priceCol + "::NUMERIC / NULLIF(" + areaCol + ", 0))";
         }
+
+        /** SQL expression that yields the sub_category text. */
+        public String subCategoryExpr() {
+            return subCategoryCol != null ? "f." + subCategoryCol : "NULL::TEXT";
+        }
     }
 
     public record TableKey(PropertyType ptype, DealType deal) {}
 
     public static final Map<TableKey, TableCfg> TABLES = Map.ofEntries(
+        // Apartments — the only family with a per-row sub_category (1+kk, 2+1, …).
         Map.entry(new TableKey(PropertyType.APARTMENT,  DealType.SALE),
-                  new TableCfg("fact_apartment_sale",     "price_asked_czk",        "price_asked_per_m2",   "usable_area_m2")),
+                  new TableCfg("fact_apartment_sale",     "price_asked_czk",        "price_asked_per_m2",   "usable_area_m2", "sub_category")),
         Map.entry(new TableKey(PropertyType.APARTMENT,  DealType.RENT),
-                  new TableCfg("fact_apartment_rent",     "price_monthly_czk",      "price_monthly_per_m2", "usable_area_m2")),
+                  new TableCfg("fact_apartment_rent",     "price_monthly_czk",      "price_monthly_per_m2", "usable_area_m2", "sub_category")),
         Map.entry(new TableKey(PropertyType.APARTMENT,  DealType.AUCTION),
-                  new TableCfg("fact_apartment_auction",  "price_starting_bid_czk", null,                   "usable_area_m2")),
+                  new TableCfg("fact_apartment_auction",  "price_starting_bid_czk", null,                   "usable_area_m2", "sub_category")),
+        // Houses / land / commercial — no sub_category column in the schema.
         Map.entry(new TableKey(PropertyType.HOUSE,      DealType.SALE),
-                  new TableCfg("fact_house_sale",         "price_asked_czk",        "price_asked_per_m2",   "usable_area_m2")),
+                  new TableCfg("fact_house_sale",         "price_asked_czk",        "price_asked_per_m2",   "usable_area_m2", null)),
         Map.entry(new TableKey(PropertyType.HOUSE,      DealType.RENT),
-                  new TableCfg("fact_house_rent",         "price_monthly_czk",      "price_monthly_per_m2", "usable_area_m2")),
+                  new TableCfg("fact_house_rent",         "price_monthly_czk",      "price_monthly_per_m2", "usable_area_m2", null)),
         Map.entry(new TableKey(PropertyType.HOUSE,      DealType.AUCTION),
-                  new TableCfg("fact_house_auction",      "price_starting_bid_czk", null,                   "usable_area_m2")),
+                  new TableCfg("fact_house_auction",      "price_starting_bid_czk", null,                   "usable_area_m2", null)),
         Map.entry(new TableKey(PropertyType.LAND,       DealType.SALE),
-                  new TableCfg("fact_land_sale",          "price_asked_czk",        "price_asked_per_m2",   "plot_area_m2")),
+                  new TableCfg("fact_land_sale",          "price_asked_czk",        "price_asked_per_m2",   "plot_area_m2",   null)),
         Map.entry(new TableKey(PropertyType.LAND,       DealType.RENT),
-                  new TableCfg("fact_land_rent",          "price_monthly_czk",      null,                   "plot_area_m2")),
+                  new TableCfg("fact_land_rent",          "price_monthly_czk",      null,                   "plot_area_m2",   null)),
         Map.entry(new TableKey(PropertyType.LAND,       DealType.AUCTION),
-                  new TableCfg("fact_land_auction",       "price_starting_bid_czk", null,                   "plot_area_m2")),
+                  new TableCfg("fact_land_auction",       "price_starting_bid_czk", null,                   "plot_area_m2",   null)),
         Map.entry(new TableKey(PropertyType.COMMERCIAL, DealType.SALE),
-                  new TableCfg("fact_commercial_sale",    "price_asked_czk",        "price_asked_per_m2",   "usable_area_m2")),
+                  new TableCfg("fact_commercial_sale",    "price_asked_czk",        "price_asked_per_m2",   "usable_area_m2", null)),
         Map.entry(new TableKey(PropertyType.COMMERCIAL, DealType.RENT),
-                  new TableCfg("fact_commercial_rent",    "price_monthly_czk",      "price_monthly_per_m2", "usable_area_m2")),
+                  new TableCfg("fact_commercial_rent",    "price_monthly_czk",      "price_monthly_per_m2", "usable_area_m2", null)),
         Map.entry(new TableKey(PropertyType.COMMERCIAL, DealType.AUCTION),
-                  new TableCfg("fact_commercial_auction", "price_starting_bid_czk", null,                   "usable_area_m2"))
+                  new TableCfg("fact_commercial_auction", "price_starting_bid_czk", null,                   "usable_area_m2", null))
     );
+
+    /**
+     * Minimum price (CZK) below which a listing is treated as a
+     * placeholder — typically the "cena dohodou" / "price on agreement"
+     * pattern, which sreality ships as 1 CZK or 0 CZK. Without this
+     * floor a single such listing in a small obec drags its average down
+     * to (nearly) zero and the legend's left edge shows 0 CZK/m².
+     *
+     * <p>Picked conservatively per deal type:
+     * <ul>
+     *   <li>Sale: 100 000 CZK — cheapest real apartments in remote
+     *       villages still clear this; anything below is a token.</li>
+     *   <li>Rent: 1 000 CZK — below this is symbolic for a parent's
+     *       sublet or similarly non-market.</li>
+     *   <li>Auction: 10 000 CZK — starting bids can be aggressive but
+     *       not single-digit thousands.</li>
+     * </ul></p>
+     */
+    public static long minPriceCzk(DealType deal) {
+        return switch (deal) {
+            case SALE    -> 100_000L;
+            case RENT    ->   1_000L;
+            case AUCTION ->  10_000L;
+        };
+    }
 
     // ------------------------------------------------------------------------
     // Facts CTE
@@ -92,6 +133,7 @@ public final class Queries {
         Collection<PropertyType> propertyTypes,
         String extraWhere
     ) {
+        long priceFloor = minPriceCzk(deal);
         List<String> parts = new ArrayList<>();
         for (PropertyType ptype : propertyTypes) {
             TableCfg cfg = TABLES.get(new TableKey(ptype, deal));
@@ -105,22 +147,25 @@ public final class Queries {
                        f.%s::BIGINT           AS price,
                        %s::NUMERIC            AS per_m2,
                        f.%s::NUMERIC          AS area,
+                       %s                     AS sub_category,
                        f.first_seen_date,
                        f.sreality_url
                 FROM   %s f
                 WHERE  f.valid_to IS NULL
                   AND  f.is_active = TRUE
                   AND  f.%s IS NOT NULL
-                  AND  f.%s > 0
+                  AND  f.%s >= %d
                   %s
                 """.formatted(
                     ptype.token(),
                     cfg.priceCol(),
                     cfg.perM2Expr(),
                     cfg.areaCol(),
+                    cfg.subCategoryExpr(),
                     cfg.table(),
                     cfg.priceCol(),
                     cfg.priceCol(),
+                    priceFloor,
                     extraWhere
                 ));
         }
@@ -132,7 +177,8 @@ public final class Queries {
               + "NULL::INT AS cast_obce_id, NULL::BIGINT AS hash_id, "
               + "NULL::NUMERIC AS gps_lat, NULL::NUMERIC AS gps_lon, "
               + "NULL::BIGINT AS price, NULL::NUMERIC AS per_m2, "
-              + "NULL::NUMERIC AS area, NULL::DATE AS first_seen_date, "
+              + "NULL::NUMERIC AS area, NULL::TEXT AS sub_category, "
+              + "NULL::DATE AS first_seen_date, "
               + "NULL::TEXT AS sreality_url WHERE FALSE"
             );
         }
