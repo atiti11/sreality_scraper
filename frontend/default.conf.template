@@ -1,0 +1,70 @@
+# nginx config baked into the frontend container.
+#
+# Two responsibilities:
+#   1. Serve the Vite-produced SPA from /usr/share/nginx/html.
+#   2. Reverse-proxy /api/* to the FastAPI backend.
+#
+# Auth model:
+#   - No nginx-level auth. The React app renders a styled login form,
+#     stores the user-entered credentials in sessionStorage and attaches
+#     them as ``Authorization: Basic …`` on every /api/* fetch.
+#   - The Java backend validates that header on every request
+#     (DASHBOARD_USER / DASHBOARD_PASSWORD env vars). nginx just forwards
+#     the header through unchanged.
+#
+# The file is kept under /etc/nginx/templates/ so we can re-add envsubst
+# placeholders later without a Dockerfile change. The filter env var in
+# the Dockerfile matches no real env var on purpose, so the template is
+# copied verbatim today.
+
+server {
+    listen 80 default_server;
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Unauthenticated healthcheck for the docker HEALTHCHECK directive.
+    location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    # Long cache for fingerprinted assets, no cache for index.html itself.
+    location /assets/ {
+        access_log off;
+        expires 30d;
+        add_header Cache-Control "public, max-age=2592000, immutable";
+        try_files $uri =404;
+    }
+
+    location = /index.html {
+        add_header Cache-Control "no-store" always;
+        try_files $uri =404;
+    }
+
+    # Reverse proxy to FastAPI / the Java backend. Service name `backend`
+    # is resolved via Docker's internal DNS.
+    location /api/ {
+        proxy_pass http://backend:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Forward the browser's Authorization header (set by the React
+        # app from the user-entered credentials). Without this nginx's
+        # default behaviour would still pass it through, but stating the
+        # intent explicitly survives future config edits.
+        proxy_set_header Authorization $http_authorization;
+
+        proxy_read_timeout 60s;
+    }
+
+    # SPA fallback — every unknown path returns the SPA shell.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

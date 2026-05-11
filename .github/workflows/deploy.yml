@@ -108,6 +108,13 @@ jobs:
       AIRFLOW_PORT:            ${{ vars.AIRFLOW_PORT }}
       CSU_XLSX_URLS:           ${{ vars.CSU_XLSX_URLS }}
       CSU_YEAR:                ${{ vars.CSU_YEAR }}
+      # ---- Dashboard ----
+      DASHBOARD_USER:          ${{ secrets.DASHBOARD_USER }}
+      DASHBOARD_PASSWORD:      ${{ secrets.DASHBOARD_PASSWORD }}
+      FRONTEND_HOST_PORT:      ${{ vars.FRONTEND_HOST_PORT }}
+      BACKEND_HOST_PORT:       ${{ vars.BACKEND_HOST_PORT }}
+      HOST_BIND:               ${{ vars.HOST_BIND }}
+      CORS_ORIGINS:            ${{ vars.CORS_ORIGINS }}
 
     steps:
       - name: Checkout
@@ -148,6 +155,8 @@ jobs:
             TELEGRAM_BOT_TOKEN,TELEGRAM_CHAT_ID,
             AIRFLOW_USER,AIRFLOW_PASSWORD,AIRFLOW_FERNET_KEY,AIRFLOW_SECRET_KEY,AIRFLOW_PORT,AIRFLOW_BASE_URL,
             CSU_XLSX_URLS,CSU_YEAR,
+            DASHBOARD_USER,DASHBOARD_PASSWORD,
+            FRONTEND_HOST_PORT,BACKEND_HOST_PORT,HOST_BIND,CORS_ORIGINS,
             DEPLOY_PATH
           script: |
             set -e
@@ -195,6 +204,12 @@ jobs:
             AIRFLOW_BASE_URL='${AIRFLOW_BASE_URL}'
             CSU_XLSX_URLS='${CSU_XLSX_URLS}'
             CSU_YEAR='${CSU_YEAR}'
+            DASHBOARD_USER='${DASHBOARD_USER}'
+            DASHBOARD_PASSWORD='${DASHBOARD_PASSWORD}'
+            FRONTEND_HOST_PORT='${FRONTEND_HOST_PORT}'
+            BACKEND_HOST_PORT='${BACKEND_HOST_PORT}'
+            HOST_BIND='${HOST_BIND}'
+            CORS_ORIGINS='${CORS_ORIGINS}'
             ENVEOF
 
       # Step 2: SCP JARs after git pull
@@ -232,6 +247,7 @@ jobs:
             cd "$DEPLOY_PATH"
 
             COMPOSE="docker compose -f docker-compose.yml -f docker-compose.pipeline.yml"
+            COMPOSE_DASH="docker compose -f docker-compose.dashboard.yml -f docker-compose.dashboard.prod.yml"
 
             echo "=== JARs on server ==="
             ls -lh pipeline/jars/
@@ -288,10 +304,18 @@ jobs:
             docker exec sreality-airflow-scheduler airflow dags unpause sreality_pipeline \
                 || echo "WARN: could not unpause sreality_pipeline (will need to be done manually in UI)"
 
+            # ----- Dashboard (FastAPI backend + nginx frontend) -----
+            # Joins scraper-shared-net so the backend can reach postgres by
+            # its compose service name. The prod overlay swaps the dev
+            # host.docker.internal default for the in-network hostname.
+            $COMPOSE_DASH build --no-cache backend frontend
+            $COMPOSE_DASH up -d backend frontend
+
             # ----- Final status summary -----
             echo ""
             echo "=== Container status ==="
             $COMPOSE ps
+            $COMPOSE_DASH ps
 
             echo ""
             echo "=== DAGs ==="

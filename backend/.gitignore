@@ -1,0 +1,17 @@
+# Env / secrets — managed via root .env.
+.env
+
+# Maven build output.
+target/
+
+# Old Python tree leftovers (the active code is now under src/main/java/).
+__pycache__/
+.venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# IDE noise.
+.idea/
+.vscode/
+*.iml

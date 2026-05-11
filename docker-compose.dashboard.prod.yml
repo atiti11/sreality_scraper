@@ -1,0 +1,63 @@
+# =============================================================================
+# Production overlay for the dashboard. Apply on top of the base file:
+#
+#   docker compose -f docker-compose.dashboard.yml \
+#                  -f docker-compose.dashboard.prod.yml up -d
+#
+# Differences from local dev:
+#   - Postgres is reached at the in-network ``postgres`` container (the one
+#     started by docker-compose.pipeline.yml on ``scraper-shared-net``),
+#     not through host.docker.internal.
+#   - Both services join ``scraper-shared-net`` so they can resolve the
+#     postgres hostname.
+#   - The frontend is bound to localhost on the host so a reverse proxy
+#     (Caddy / nginx) in front of it can add TLS.
+# =============================================================================
+
+networks:
+  scraper-shared-net:
+    external: true
+    name: scraper-shared-net
+
+services:
+
+  backend:
+    environment:
+      # Override the dev default; the postgres container lives in
+      # scraper-shared-net and is reachable by its compose service name.
+      PG_HOST: postgres
+      PG_PORT: "5432"
+    extra_hosts: !reset []
+    networks:
+      - dashboard-net
+      - scraper-shared-net
+    # Don't publish the backend to the host — only the frontend (nginx)
+    # talks to it, via the shared internal network.
+    ports: !reset []
+    deploy:
+      resources:
+        reservations:
+          memory: 128m
+        limits:
+          memory: 512m
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  frontend:
+    networks:
+      - dashboard-net
+      - scraper-shared-net
+    deploy:
+      resources:
+        reservations:
+          memory: 32m
+        limits:
+          memory: 256m
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"

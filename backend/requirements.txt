@@ -1,0 +1,4 @@
+# DEPRECATED — the dashboard backend is now a Java/Maven project.
+# Dependencies are declared in pom.xml. This file is kept as a stub so
+# that anyone who runs ``pip install -r requirements.txt`` out of habit
+# gets a clear error rather than installing a stale FastAPI stack.

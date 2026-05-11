@@ -1,0 +1,150 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ===========================================================================
+   Modern theme — light, polished, with emerald accent.
+   Inspired by Apple Maps / Linear / Vercel: generous whitespace, soft shadows,
+   glass overlays on top of the map.
+   ========================================================================= */
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 47.4% 11.2%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 47.4% 11.2%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 47.4% 11.2%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+
+    --primary: 160 84% 25%;            /* emerald-700 — main accent */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --accent: 160 84% 92%;             /* emerald-50 ish */
+    --accent-foreground: 160 84% 25%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --ring: 160 84% 39%;               /* emerald-500 focus ring */
+
+    --radius: 0.75rem;                 /* slightly larger than default — feels softer */
+  }
+
+  .dark {
+    --background: 222.2 47.4% 7%;
+    --foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 12%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --popover: 222.2 47.4% 11.2%;
+    --popover-foreground: 210 40% 98%;
+    --card: 222.2 47.4% 11.2%;
+    --card-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --primary: 160 84% 39%;
+    --primary-foreground: 222.2 47.4% 4%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --accent: 160 84% 18%;
+    --accent-foreground: 160 84% 92%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+    --ring: 160 84% 39%;
+  }
+
+  * {
+    @apply border-border;
+  }
+  html, body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
+  }
+  body {
+    background:
+      radial-gradient(1200px 600px at 20% -10%, hsl(160 84% 95%) 0%, transparent 60%),
+      radial-gradient(900px 500px at 95% 100%, hsl(220 84% 96%) 0%, transparent 60%),
+      hsl(var(--background));
+    background-attachment: fixed;
+    min-height: 100vh;
+  }
+}
+
+/* === Glass / floating cards ============================================== */
+@layer components {
+  .glass {
+    @apply bg-background/80 backdrop-blur-xl border shadow-[0_8px_30px_-12px_rgb(0_0_0_/_0.15)];
+  }
+  .glass-strong {
+    @apply bg-background/95 backdrop-blur-2xl border shadow-[0_20px_60px_-12px_rgb(0_0_0_/_0.25)];
+  }
+
+  /* Stat number — large, tight, modern. */
+  .stat-number {
+    @apply text-4xl font-semibold tracking-tight tabular-nums;
+    font-feature-settings: "tnum";
+  }
+  .stat-label {
+    @apply text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground;
+  }
+}
+
+/* === Leaflet styling tweaks ============================================== */
+.leaflet-container {
+  background: #f8fafc;   /* slate-50 */
+  font-family: inherit;
+  cursor: default;
+}
+.leaflet-container.leaflet-grab { cursor: grab; }
+.leaflet-container.leaflet-grab:active { cursor: grabbing; }
+
+/* Hide Leaflet's default attribution chrome; we'll show a discreet one ourselves. */
+.leaflet-control-attribution {
+  background: rgba(255, 255, 255, 0.75) !important;
+  backdrop-filter: blur(6px);
+  font-size: 10px !important;
+  padding: 2px 8px !important;
+  border-radius: 6px 0 0 0;
+}
+
+.leaflet-tooltip {
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  font-family: inherit;
+  font-size: 12px;
+  padding: 8px 10px;
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.25);
+  font-weight: 500;
+}
+.leaflet-tooltip-top:before,
+.leaflet-tooltip-bottom:before,
+.leaflet-tooltip-left:before,
+.leaflet-tooltip-right:before { display: none; }
+
+/* Zoom controls: rounded, more spacious */
+.leaflet-bar a,
+.leaflet-bar a:hover {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(6px);
+  width: 36px;
+  height: 36px;
+  line-height: 36px;
+  color: hsl(var(--foreground));
+  border-color: hsl(var(--border));
+  font-weight: 500;
+}
+.leaflet-bar a:first-child { border-top-left-radius: 10px; border-top-right-radius: 10px; }
+.leaflet-bar a:last-child  { border-bottom-left-radius: 10px; border-bottom-right-radius: 10px; }
+.leaflet-control-zoom { box-shadow: 0 6px 20px -8px rgba(0,0,0,0.2); }

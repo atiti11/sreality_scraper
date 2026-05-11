@@ -1,0 +1,77 @@
+# =============================================================================
+# Sreality Dashboard — docker-compose (local dev).
+#
+# Spins up:
+#   - backend  (FastAPI on :8000 inside, mapped to ${BACKEND_HOST_PORT})
+#   - frontend (nginx on :80 inside, mapped to ${FRONTEND_HOST_PORT})
+#              serves the React SPA + proxies /api → backend, gated by
+#              Basic Auth and server-side X-API-Key injection.
+#
+# Postgres is NOT bundled here. In dev the backend talks to a Postgres
+# you've already exposed on the *host* — typically through an SSH tunnel
+# that forwards the VPS Postgres to localhost:5433. Inside the container
+# we reach the host via ``host.docker.internal``.
+#
+# For production overlay, use:
+#   docker compose -f docker-compose.dashboard.yml \
+#                  -f docker-compose.dashboard.prod.yml up -d
+# (which switches PG_HOST to the in-network ``postgres`` container).
+#
+# All variables come from the project's single ``.env`` at the repo root.
+# =============================================================================
+
+services:
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sreality-dashboard-backend
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    environment:
+      # The SSH tunnel runs on the *host*, not the container's localhost.
+      # The prod overlay overrides this to ``postgres``.
+      PG_HOST: host.docker.internal
+      # Bind the API to all interfaces inside the container so nginx can reach it.
+      API_HOST: 0.0.0.0
+      API_PORT: "8000"
+      # Same-origin serving from nginx makes CORS moot, but allow the host
+      # port for direct testing of /docs.
+      CORS_ORIGINS: "http://localhost:${FRONTEND_HOST_PORT:-8088},http://127.0.0.1:${FRONTEND_HOST_PORT:-8088}"
+      # Backend validates the same Basic Auth credentials the nginx layer
+      # checks against /etc/nginx/.htpasswd — defense in depth if port 8000
+      # is ever reachable directly.
+      DASHBOARD_USER: "${DASHBOARD_USER}"
+      DASHBOARD_PASSWORD: "${DASHBOARD_PASSWORD}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - dashboard-net
+    expose:
+      - "8000"
+    ports:
+      - "${HOST_BIND:-127.0.0.1}:${BACKEND_HOST_PORT:-8000}:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: sreality-dashboard-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    # Auth is handled by the React SPA + Java backend; nginx is just a
+    # static-file server and reverse proxy, so it doesn't need any
+    # secrets passed in.
+    networks:
+      - dashboard-net
+    ports:
+      - "${HOST_BIND:-127.0.0.1}:${FRONTEND_HOST_PORT:-8088}:80"
+
+networks:
+  dashboard-net:
+    name: sreality-dashboard-net
+    driver: bridge

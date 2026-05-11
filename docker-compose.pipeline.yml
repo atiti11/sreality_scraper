@@ -70,6 +70,20 @@ services:
       POSTGRES_DB:       ${PG_DATABASE:-sreality}
       POSTGRES_USER:     ${PG_USERNAME:-sreality}
       POSTGRES_PASSWORD: ${PG_PASSWORD:-changeme}
+    # Tuned for 8 GB host: shared_buffers ~25 % of mem_limit,
+    # effective_cache_size ~75 % of mem_limit, work_mem larger for SCD queries.
+    command:
+      - postgres
+      - -c
+      - shared_buffers=384MB
+      - -c
+      - effective_cache_size=1GB
+      - -c
+      - work_mem=16MB
+      - -c
+      - maintenance_work_mem=128MB
+      - -c
+      - max_connections=50
     volumes:
       - pg-data:/var/lib/postgresql/data
       - ./postgres-init:/docker-entrypoint-initdb.d:ro
@@ -83,7 +97,7 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
-    mem_limit: 300m
+    mem_limit: 1500m
 
   # ---------------------------------------------------------------------------
   # Airflow — custom image with Java 21 JRE
@@ -124,9 +138,8 @@ services:
     command: webserver
     networks:
       - scraper-net
-    # Raised from 400m — Flask login screen + all loaded modules need ~600 MB.
-    # 400m caused OOM-kill of gunicorn workers on /login (502 to client).
-    mem_limit: 700m
+    # On 8 GB host: 1000m for comfortable Flask render + login + grid view.
+    mem_limit: 1000m
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
       interval: 30s
@@ -150,6 +163,5 @@ services:
       - scraper-net
     # Scheduler hosts Java JARs spawned by BashOperator (jar1…jar5). Each JAR
     # uses -Xmx512m heap + ~200-300m JVM overhead, plus scheduler itself ~350m.
-    # 700m caused OOM-kill (137) during jar3-csu. 1500m gives comfortable
-    # headroom; 4 GB host has the budget.
-    mem_limit: 1500m
+    # On 8 GB host: 2000m gives generous headroom even with future bigger JARs.
+    mem_limit: 2000m

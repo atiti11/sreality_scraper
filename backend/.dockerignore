@@ -1,0 +1,25 @@
+# Build artefacts the Maven container will produce itself; copying the
+# host's target/ in would just slow the build down.
+target/
+
+# Old Python tree — kept around as deprecation stubs but not part of
+# the runtime image.
+*.py
+requirements.txt
+__pycache__/
+.venv/
+.mypy_cache/
+.pytest_cache/
+
+# Env / secrets handled by docker-compose env_file.
+.env
+.env.example
+
+# IDE / OS noise.
+.idea/
+.vscode/
+*.iml
+.DS_Store
+
+# Logs.
+*.log
