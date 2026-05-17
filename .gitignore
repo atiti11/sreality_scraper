@@ -21,3 +21,5 @@ Thumbs.db
 # The jars/ directory itself is tracked (via .gitkeep) but not the JARs
 pipeline/jars/*.jar
 initial-load/target/
+.claude/
+.venv/
