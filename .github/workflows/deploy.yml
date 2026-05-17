@@ -23,15 +23,17 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      - name: Install original scraper
-        run: mvn install -DskipTests -q
-
+      # Build everything in the pipeline reactor (scraper-lib, shared, jar1..jar5)
+      # in one shot — scraper-lib is the former standalone scraper, now a child
+      # module that jar1-scraper and jar4-enricher depend on.
       - name: Build pipeline JARs
         run: |
           cd pipeline
           mvn package -DskipTests -q
           bash copy_jars.sh
 
+      # initial-load depends on pipeline-shared, jar4-enricher, and sreality-scraper —
+      # all installed into the local .m2 here so the next step can resolve them.
       - name: Install pipeline modules into local .m2
         run: |
           cd pipeline
@@ -253,8 +255,7 @@ jobs:
             ls -lh pipeline/jars/
             ls -lh initial-load/target/
 
-            # ----- Original scraper + MongoDB -----
-            docker compose -f docker-compose.yml build --no-cache scraper
+            # ----- MongoDB (staging queue) -----
             docker compose -f docker-compose.yml up -d mongodb
 
             # ----- Postgres + Airflow images -----
@@ -304,12 +305,32 @@ jobs:
             docker exec sreality-airflow-scheduler airflow dags unpause sreality_pipeline \
                 || echo "WARN: could not unpause sreality_pipeline (will need to be done manually in UI)"
 
-            # ----- Dashboard (FastAPI backend + nginx frontend) -----
-            # Joins scraper-shared-net so the backend can reach postgres by
-            # its compose service name. The prod overlay swaps the dev
-            # host.docker.internal default for the in-network hostname.
+            # ----- Dashboard: Javalin backend + nginx frontend -----
+            # Both join scraper-shared-net so the backend can reach postgres
+            # by its compose service name. The prod overlay swaps the dev
+            # host.docker.internal default for the in-network hostname and
+            # drops the backend's host port publication (only nginx talks to it).
             $COMPOSE_DASH build --no-cache backend frontend
             $COMPOSE_DASH up -d backend frontend
+
+            # ----- Wait for the frontend (nginx) to start accepting connections -----
+            echo "Waiting for dashboard frontend to come up..."
+            FRONTEND_PORT="${FRONTEND_HOST_PORT:-8088}"
+            for i in $(seq 1 24); do
+                # 401 is the success case here — Basic Auth is in front of everything.
+                CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+                    "http://127.0.0.1:${FRONTEND_PORT}/" || echo "000")
+                if [ "$CODE" = "200" ] || [ "$CODE" = "401" ]; then
+                    echo "Frontend responding (HTTP ${CODE}) after ${i}x5s"
+                    break
+                fi
+                if [ "$i" = "24" ]; then
+                    echo "WARN: frontend did not respond on :${FRONTEND_PORT} within 2 minutes"
+                    docker logs sreality-dashboard-frontend --tail 50 || true
+                    docker logs sreality-dashboard-backend  --tail 50 || true
+                fi
+                sleep 5
+            done
 
             # ----- Final status summary -----
             echo ""

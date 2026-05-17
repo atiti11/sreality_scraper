@@ -138,6 +138,11 @@ docker compose -f docker-compose.yml -f docker-compose.pipeline.yml up -d airflo
 
 See [`pipeline/README.md`](pipeline/README.md) for the detailed JAR-by-JAR rundown.
 
+The same pipeline also runs unattended on a Hetzner VPS, where it feeds the
+public dashboard at <https://reality.annakmentova.cz>. The full VPS setup —
+DNS, Caddy + Let's Encrypt, production overlay files — is documented under
+[Production deployment](#production-deployment) below.
+
 ### Backend (graded)
 
 ```bash
@@ -152,8 +157,110 @@ docker compose -f docker-compose.yml -f docker-compose.dashboard.yml up -d backe
 docker compose -f docker-compose.yml \
                -f docker-compose.pipeline.yml \
                -f docker-compose.dashboard.yml up -d
-# dashboard at http://localhost:8080 (via nginx + htpasswd)
+# dashboard at http://localhost:8088 (via nginx + htpasswd)
 ```
+
+---
+
+## Production deployment
+
+In addition to running locally, the full stack is deployed on a small
+Hetzner VPS (1 vCPU / 2 GB RAM, Ubuntu 22.04) and the dashboard is reachable
+publicly at **<https://reality.annakmentova.cz>**. The pipeline runs on a
+12 h Airflow schedule, the backend serves the API, and the React frontend is
+fronted by Caddy which terminates TLS and proxies to the dashboard
+containers.
+
+### One-time VPS setup
+
+```bash
+# 1. Point DNS at the VPS
+#    In your DNS provider, create an A record:
+#       reality.annakmentova.cz   →   <VPS public IPv4>
+#    (and optionally an AAAA for IPv6).
+
+# 2. SSH in and install Docker + Caddy
+ssh root@<VPS_IP>
+apt update && apt install -y docker.io docker-compose-plugin caddy git
+
+# 3. Clone the repo and fill in .env
+git clone <repo-url> /opt/sreality
+cd /opt/sreality
+cp .env.example .env
+nano .env   # set POSTGRES_PASSWORD, MONGO_PASSWORD, AIRFLOW_FERNET_KEY,
+            # DASHBOARD_USER, DASHBOARD_PASSWORD, TELEGRAM_*, CSU_XLSX_URLS
+
+# 4. Build pipeline JARs
+cd pipeline && mvn package -DskipTests && cd ..
+
+# 5. Start the whole stack with the production overlays
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.pipeline.yml \
+  -f docker-compose.dashboard.yml \
+  -f docker-compose.dashboard.prod.yml \
+  up -d
+
+# 6. Bootstrap the data (one-off)
+#    Open the Airflow UI via SSH tunnel:
+ssh -L 8080:localhost:8080 root@<VPS_IP>
+#    then in a browser at http://localhost:8080:
+#      a) trigger DAG  ruian_full_load   (waits for completion)
+#      b) trigger DAG  csu_full_load     (waits for completion)
+#      c) enable DAG   sreality_pipeline (12h schedule)
+```
+
+### Caddy reverse proxy
+
+Create `/etc/caddy/Caddyfile` on the VPS:
+
+```caddy
+reality.annakmentova.cz {
+    encode zstd gzip
+
+    # Frontend container (nginx) is bound to 127.0.0.1:8088 by
+    # docker-compose.dashboard.yml — Caddy proxies to it and terminates TLS.
+    reverse_proxy 127.0.0.1:8088
+}
+```
+
+Then reload Caddy:
+
+```bash
+systemctl reload caddy
+```
+
+Caddy will automatically obtain and renew a Let's Encrypt certificate for
+`reality.annakmentova.cz` on first request. After a minute or two the site is
+live over HTTPS.
+
+### Verifying the deployment
+
+```bash
+# DNS resolves
+dig +short reality.annakmentova.cz
+
+# Cert is valid
+curl -sI https://reality.annakmentova.cz | head -1
+# → HTTP/2 401   (Basic Auth is in front — credentials are DASHBOARD_USER / DASHBOARD_PASSWORD)
+
+# Containers are healthy
+docker compose ps
+```
+
+### Production notes
+
+- Postgres and MongoDB **only listen on 127.0.0.1** on the VPS. Database
+  access from a laptop goes through an SSH tunnel:
+  `ssh -L 5433:localhost:5432 root@<VPS_IP>`, then connect to `localhost:5433`.
+- The backend container is **not published to the host** (`ports: !reset []`
+  in the prod overlay). Only nginx → backend traffic happens inside the
+  `scraper-shared-net` network.
+- Both the nginx layer and the backend re-validate the same Basic Auth
+  credentials, so even if port 8000 were ever exposed it would still be
+  gated.
+- The pipeline overlay caps container memory so the whole stack
+  (Postgres + Mongo + Airflow + 5 JARs + backend + frontend) fits in 2 GB.
 
 ---
 

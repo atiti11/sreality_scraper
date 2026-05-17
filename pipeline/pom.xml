@@ -11,6 +11,7 @@
   <name>Sreality Pipeline — Parent</name>
 
   <modules>
+    <module>scraper-lib</module>
     <module>shared</module>
     <module>jar1-scraper</module>
     <module>jar2-ruian</module>
