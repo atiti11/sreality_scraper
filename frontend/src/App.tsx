@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   LayoutGrid, LogOut, Map as MapIcon, Table as TableIcon,
-  ScatterChart as ScatterIcon,
+  ScatterChart as ScatterIcon, TrendingUp,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { probeAuth } from "@/lib/api";
 import { MapPage } from "@/pages/map-page";
 import { ListingsPage } from "@/pages/listings-page";
 import { CorrelationPage } from "@/pages/correlation-page";
+import { PriceChangesPage } from "@/pages/price-changes-page";
 import { LoginPage } from "@/pages/login-page";
 
 /**
@@ -27,10 +28,10 @@ import { LoginPage } from "@/pages/login-page";
  *   3. Otherwise, gate everything behind {@link LoginPage}.
  */
 export default function App() {
-  const tab               = useAppStore((s) => s.tab);
-  const setTab            = useAppStore((s) => s.setTab);
-  const isAuthenticated   = useAuthStore((s) => s.isAuthenticated);
-  const setBypass         = useAuthStore((s) => s.setBypass);
+  const tab = useAppStore((s) => s.tab);
+  const setTab = useAppStore((s) => s.setTab);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const setBypass = useAuthStore((s) => s.setBypass);
 
   // Initial probe — figures out whether auth is even required on this
   // deployment, and validates any sessionStorage creds the user might
@@ -106,6 +107,12 @@ export default function App() {
                 icon={<ScatterIcon className="h-3.5 w-3.5" />}
                 label="Correlation"
               />
+              {/* <TabButton
+                active={tab === "price-changes"}
+                onClick={() => setTab("price-changes")}
+                icon={<TrendingUp className="h-3.5 w-3.5" />}
+                label="Price changes"
+              /> */}
             </nav>
 
             <UserMenu />
@@ -122,6 +129,11 @@ export default function App() {
       {tab === "correlation" && (
         <main className="mx-auto max-w-[1600px] px-6 py-6">
           <CorrelationPage />
+        </main>
+      )}
+      {tab === "price-changes" && (
+        <main className="mx-auto max-w-[1600px] px-6 py-6">
+          <PriceChangesPage />
         </main>
       )}
     </div>
@@ -160,7 +172,7 @@ function TabButton({
  * there's nothing meaningful to log out of.
  */
 function UserMenu() {
-  const user   = useAuthStore((s) => s.user);
+  const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
 
   if (!user) return null;

@@ -153,9 +153,21 @@ export function MapView() {
   const selected = useMapStore((s) => s.selected);
 
   const [level, setLevel] = useState<MapLevel>("kraj");
-  const [bbox, setBbox] = useState<[number, number, number, number] | null>(null);
+  // Single source of truth for "where is the user looking right now".
+  // Replaces the old standalone bbox state — we derive both (a) the bbox
+  // query parameter for obec / cast_obce API calls and (b) the colour
+  // scale's value range from it, so the legend stays in lock-step with
+  // the map at every pan and zoom.
+  const [mapBounds, setMapBounds] = useState<L.LatLngBounds | null>(null);
   const [data, setData] = useState<RegionFeatureCollection | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // bbox tuple for the API — padded copy of the visible bounds, only
+  // populated at obec / cast_obce levels where the markers query honours it.
+  const bbox = useMemo<[number, number, number, number] | null>(() => {
+    if (!isBboxLevel(level) || !mapBounds) return null;
+    return boundsToBbox(mapBounds);
+  }, [level, mapBounds]);
 
   // -- Mount the Leaflet map once.
   useEffect(() => {
@@ -193,20 +205,16 @@ export function MapView() {
 
     mapRef.current = m;
 
-    const updateLevelAndBbox = () => {
+    const updateView = () => {
       const next = levelForZoom(m.getZoom());
       setLevel((prev) => (prev !== next ? next : prev));
-      // Track bounds for obec / cast_obce subdivisions; for kraj / okres we
-      // load the whole country, so bbox is irrelevant and kept at null to
-      // avoid stale-bbox refetches when the user pans at low zoom.
-      if (isBboxLevel(next)) {
-        setBbox(boundsToBbox(m.getBounds()));
-      } else {
-        setBbox((prev) => (prev === null ? prev : null));
-      }
+      // Always refresh map bounds so the colour scale + legend stay
+      // pinned to what's actually on screen — even at kraj / okres
+      // levels where the API doesn't need a bbox.
+      setMapBounds(m.getBounds());
     };
-    m.on("zoomend", updateLevelAndBbox);
-    m.on("moveend", updateLevelAndBbox);
+    m.on("zoomend", updateView);
+    m.on("moveend", updateView);
 
     // ---- The actual fix for "map flashes then goes blank" --------------
     // Leaflet caches the container's pixel size at L.map() time. If the
@@ -215,8 +223,13 @@ export function MapView() {
     // and disappears as soon as the user pans or the layout recomputes.
     // Calling invalidateSize() after the next paint forces a re-measure;
     // a ResizeObserver keeps it honest on window resizes.
+    //
+    // We also seed mapBounds here so the legend's first render has a
+    // viewport to base its colour scale on — otherwise the very first
+    // paint would compute the palette from every feature in the country.
     const initialFix = window.requestAnimationFrame(() => {
       m.invalidateSize();
+      setMapBounds(m.getBounds());
     });
     const ro = new ResizeObserver(() => m.invalidateSize());
     ro.observe(container);
@@ -224,8 +237,8 @@ export function MapView() {
     return () => {
       window.cancelAnimationFrame(initialFix);
       ro.disconnect();
-      m.off("zoomend", updateLevelAndBbox);
-      m.off("moveend", updateLevelAndBbox);
+      m.off("zoomend", updateView);
+      m.off("moveend", updateView);
       m.remove();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       if (container && (container as any)._leaflet_id !== undefined) {
@@ -240,6 +253,9 @@ export function MapView() {
   // For kraj & okres we load the whole country once per filter change.
   // For obec & cast_obce we pass the current bbox so the backend returns
   // only the regions visible on screen — otherwise we'd ship 6k / 16k rows.
+  // The bboxDep key is rounded so micro-pans don't trigger refetches;
+  // the *visibleFeatures* memo below uses the raw bounds, so the legend
+  // still rescales smoothly on every move.
   // NOTE: `selected` is intentionally NOT in the dependency array.
   const bboxDep = isBboxLevel(level) ? bboxKey(bbox) : "";
   useEffect(() => {
@@ -258,12 +274,28 @@ export function MapView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [level, deal, propertyTypes, bboxDep]);
 
-  // -- Compute colour scale from the visible features.
+  // -- Filter loaded features to what's currently on screen.
+  // Drives both the colour scale and the legend, so the user always sees
+  // a gradient anchored to the visible data rather than the whole-country
+  // extremes. Polygons (non-Point geometries) are kept unconditionally —
+  // we can't cheaply test arbitrary geometries against bounds.
+  const visibleFeatures = useMemo(() => {
+    if (!data) return [] as RegionFeature[];
+    if (!mapBounds) return data.features;
+    return data.features.filter((f) => {
+      if (!f.geometry || f.geometry.type !== "Point") return true;
+      const [lon, lat] = (f.geometry as GeoJSON.Point).coordinates;
+      return mapBounds.contains([lat, lon]);
+    });
+  }, [data, mapBounds]);
+
+  // -- Compute colour scale from the *visible* features so the gradient
+  // re-anchors live as the user pans/zooms. With ~14 kraje or hundreds
+  // of obce on screen, this is a cheap O(n) scan on every moveend.
   const palette = useMemo(() => {
-    if (!data) return { lo: 0, hi: 1 };
-    const [lo, hi] = valueBounds(data.features.map((f) => f.properties.avg_per_m2));
+    const [lo, hi] = valueBounds(visibleFeatures.map((f) => f.properties.avg_per_m2));
     return { lo, hi };
-  }, [data]);
+  }, [visibleFeatures]);
 
   // -- Render / re-render polygons.
   useEffect(() => {
@@ -355,12 +387,12 @@ export function MapView() {
         </div>
       )}
 
-      {data && data.features.length > 0 && (
+      {data && visibleFeatures.length > 0 && (
         <Legend
           lo={palette.lo}
           hi={palette.hi}
           level={data.level}
-          count={data.features.length}
+          count={visibleFeatures.length}
         />
       )}
     </div>

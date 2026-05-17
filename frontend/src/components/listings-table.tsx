@@ -1,11 +1,14 @@
-import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
+import { Fragment, useEffect, useState } from "react";
+import {
+  ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ExternalLink,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { ListingDetailCard } from "@/components/listing-detail-card";
 import { api } from "@/lib/api";
 import { useListingsStore } from "@/lib/store";
 import { area, czk, czkPerM2, num } from "@/lib/format";
@@ -28,6 +31,18 @@ export function ListingsTable() {
   const [count, setCount] = useState<number | null>(null);
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(false);
+  // Per-row open/closed state for the detail dropdown. The key is
+  // ``${property_type}-${hash_id}`` so toggling one row doesn't disturb
+  // others. Cleared when the user paginates or refilters.
+  const [openRows, setOpenRows] = useState<Set<string>>(new Set());
+  function toggleRow(key: string) {
+    setOpenRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   // Re-fetch when filters change (but not when only sort changes — re-fetch
   // is handled by the dependency below). Reset page to 0 on filter change.
@@ -45,7 +60,8 @@ export function ListingsTable() {
     unemploymentMax: filters.unemploymentMax,
   });
 
-  useEffect(() => { setPage(0); }, [filterKey]);
+  useEffect(() => { setPage(0); setOpenRows(new Set()); }, [filterKey]);
+  useEffect(() => { setOpenRows(new Set()); }, [page]);
 
   useEffect(() => {
     let cancelled = false;
@@ -124,6 +140,7 @@ export function ListingsTable() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                <Th />
                 <Th>Type</Th>
                 <Th>Listing</Th>
                 <Th align="right">Area</Th>
@@ -134,54 +151,81 @@ export function ListingsTable() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
-                <tr
-                  key={`${r.property_type}-${r.hash_id}`}
-                  className="border-b transition-colors last:border-0 hover:bg-muted/40"
-                >
-                  <Td>
-                    <Badge variant="secondary" className="rounded-full font-medium">
-                      {PROPERTY_LABELS[r.property_type]}
-                    </Badge>
-                  </Td>
-                  <Td>
-                    {/* Synthesised name (e.g. "Apartment 2+1, 65 m²") is the
-                        row's primary identifier; the obec / okres / kraj
-                        chain sits under it as muted secondary context. */}
-                    <div className="font-medium">{r.title || "Listing"}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {[r.obec, r.okres, r.kraj].filter(Boolean).join(" · ") || "—"}
-                    </div>
-                  </Td>
-                  <Td align="right">{area(r.area)}</Td>
-                  <Td align="right">
-                    <span className="font-medium tabular-nums">{czk(r.price)}</span>
-                  </Td>
-                  <Td align="right">
-                    <span className="tabular-nums text-primary">{czkPerM2(r.per_m2)}</span>
-                  </Td>
-                  <Td align="right" className="text-xs text-muted-foreground tabular-nums">
-                    {r.first_seen_date ?? "—"}
-                  </Td>
-                  <Td>
-                    {r.url ? (
-                      <a
-                        href={r.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1 text-primary hover:underline"
-                      >
-                        open <ExternalLink className="h-3 w-3" />
-                      </a>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
+              {rows.map((r) => {
+                const rowKey = `${r.property_type}-${r.hash_id}`;
+                const isOpen = openRows.has(rowKey);
+                return (
+                  <Fragment key={rowKey}>
+                    <tr
+                      className="border-b transition-colors last:border-0 hover:bg-muted/40 cursor-pointer"
+                      onClick={() => toggleRow(rowKey)}
+                    >
+                      <Td className="w-8">
+                        <span
+                          className="inline-grid h-6 w-6 place-items-center rounded-full text-muted-foreground hover:bg-muted"
+                          aria-label={isOpen ? "Hide details" : "Show details"}
+                        >
+                          {isOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                        </span>
+                      </Td>
+                      <Td>
+                        <Badge variant="secondary" className="rounded-full font-medium">
+                          {PROPERTY_LABELS[r.property_type]}
+                        </Badge>
+                      </Td>
+                      <Td>
+                        {/* Synthesised name (e.g. "Apartment 2+1, 65 m²")
+                            is the row's primary identifier; the obec /
+                            okres / kraj chain sits under it as muted
+                            secondary context. */}
+                        <div className="font-medium">{r.title || "Listing"}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {[r.obec, r.okres, r.kraj].filter(Boolean).join(" · ") || "—"}
+                        </div>
+                      </Td>
+                      <Td align="right">{area(r.area)}</Td>
+                      <Td align="right">
+                        <span className="font-medium tabular-nums">{czk(r.price)}</span>
+                      </Td>
+                      <Td align="right">
+                        <span className="tabular-nums text-primary">{czkPerM2(r.per_m2)}</span>
+                      </Td>
+                      <Td align="right" className="text-xs text-muted-foreground tabular-nums">
+                        {r.first_seen_date ?? "—"}
+                      </Td>
+                      <Td onClick={(e) => e.stopPropagation()}>
+                        {r.url ? (
+                          <a
+                            href={r.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-primary hover:underline"
+                          >
+                            open <ExternalLink className="h-3 w-3" />
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </Td>
+                    </tr>
+                    {isOpen && (
+                      <tr className="border-b last:border-0">
+                        <td colSpan={8} className="p-0">
+                          <ListingDetailCard
+                            propertyType={r.property_type}
+                            deal={filters.deal}
+                            hashId={r.hash_id}
+                            srealityUrl={r.url}
+                          />
+                        </td>
+                      </tr>
                     )}
-                  </Td>
-                </tr>
-              ))}
+                  </Fragment>
+                );
+              })}
               {!loading && rows.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="p-12 text-center text-muted-foreground">
+                  <td colSpan={8} className="p-12 text-center text-muted-foreground">
                     <div className="font-medium">No listings match the current filters.</div>
                     <div className="text-xs mt-1">Try widening price/area ranges or clearing the region.</div>
                   </td>
@@ -189,7 +233,7 @@ export function ListingsTable() {
               )}
               {loading && rows.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="p-12 text-center text-muted-foreground">
+                  <td colSpan={8} className="p-12 text-center text-muted-foreground">
                     Loading…
                   </td>
                 </tr>
@@ -207,7 +251,19 @@ function Th({ children, align = "left" }: { children?: React.ReactNode; align?: 
 }
 
 function Td({
-  children, align = "left", className,
-}: { children?: React.ReactNode; align?: "left" | "right"; className?: string }) {
-  return <td className={cn("px-4 py-3", align === "right" && "text-right tabular-nums", className)}>{children}</td>;
+  children, align = "left", className, onClick,
+}: {
+  children?: React.ReactNode;
+  align?: "left" | "right";
+  className?: string;
+  onClick?: (e: React.MouseEvent) => void;
+}) {
+  return (
+    <td
+      onClick={onClick}
+      className={cn("px-4 py-3", align === "right" && "text-right tabular-nums", className)}
+    >
+      {children}
+    </td>
+  );
 }

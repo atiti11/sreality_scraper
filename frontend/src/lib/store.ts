@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type {
-  CsuMetricKey, Filters, ListingsFilters, PropertyType, RegionLevel,
+  CsuMetricKey, Filters, ListingsFilters, PriceSort, PriceWindow,
+  PropertyType, RegionLevel,
 } from "./types";
 import { CSU_METRIC_DEFAULT } from "./types";
 
@@ -131,9 +132,47 @@ export const useCorrelationStore = create<CorrelationState>((set) => ({
   setMinListings: (n) => set({ minListings: n }),
 }));
 
+// ---------------------------------------------------------------------------
+// Price-changes page — listings sorted by biggest price move in a window.
+// Lives in its own store so the user's settings persist when they jump
+// between tabs.
+// ---------------------------------------------------------------------------
+interface PriceChangesState extends Filters {
+  window:      PriceWindow;
+  sort:        PriceSort;
+  regionLevel: RegionLevel | null;
+  regionId:    number | null;
+  setDeal:           (d: Filters["deal"]) => void;
+  setPropertyTypes:  (ts: PropertyType[]) => void;
+  togglePropertyType:(t: PropertyType)    => void;
+  setWindow:         (w: PriceWindow)     => void;
+  setSort:           (s: PriceSort)       => void;
+  setRegion:         (level: RegionLevel | null, id: number | null) => void;
+}
+
+export const usePriceChangesStore = create<PriceChangesState>((set) => ({
+  deal: "sale",
+  propertyTypes: ["apartment", "house"],
+  window: "1m",
+  sort:   "abs_desc",
+  regionLevel: null,
+  regionId:    null,
+  setDeal: (d) => set({ deal: d }),
+  setPropertyTypes: (ts) => set({ propertyTypes: ts }),
+  togglePropertyType: (t) =>
+    set((s) => ({
+      propertyTypes: s.propertyTypes.includes(t)
+        ? s.propertyTypes.filter((x) => x !== t)
+        : [...s.propertyTypes, t],
+    })),
+  setWindow: (w) => set({ window: w }),
+  setSort:   (s) => set({ sort: s }),
+  setRegion: (level, id) => set({ regionLevel: level, regionId: id }),
+}));
+
 interface AppState {
-  tab: "map" | "listings" | "correlation";
-  setTab: (t: "map" | "listings" | "correlation") => void;
+  tab: "map" | "listings" | "correlation" | "price-changes";
+  setTab: (t: "map" | "listings" | "correlation" | "price-changes") => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({

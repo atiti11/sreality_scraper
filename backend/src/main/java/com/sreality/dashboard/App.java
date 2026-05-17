@@ -75,6 +75,13 @@ public final class App {
         app.get("/api/region/{level}/{region_id}/price-changes",  new PriceChanges(db.dataSource()));
         app.get("/api/listings",                                  Listings.list(db.dataSource()));
         app.get("/api/listings/count",                            Listings.count(db.dataSource()));
+        // Single-listing detail panel — returns every column from the
+        // active fact-table row plus the long description text.
+        app.get("/api/listing/{property_type}/{deal}/{hash_id}/detail",
+                new ListingDetail(db.dataSource()));
+        // "Biggest price movers in the last N days" — backs the price
+        // changes page.
+        app.get("/api/price-movers",                              PriceMovers.handler(db.dataSource()));
         app.get("/api/scatter/csu-metrics",                       Scatter.catalog());
         app.get("/api/scatter/price-vs-csu",                      Scatter.priceVsCsu(db.dataSource()));
 
@@ -103,6 +110,8 @@ public final class App {
             "/api/region/{level}/{id}/price-changes?deal=&property_types=&limit=",
             "/api/listings?...filters",
             "/api/listings/count?...filters",
+            "/api/listing/{property_type}/{deal}/{hash_id}/detail",
+            "/api/price-movers?deal=&property_types=&window=1d|3d|1w|1m&sort=&region_level=&region_id=",
             "/api/scatter/csu-metrics",
             "/api/scatter/price-vs-csu?metric=&deal=&property_types=&min_listings="
         ));

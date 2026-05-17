@@ -190,3 +190,63 @@ export const REGION_LEVEL_LABELS: Record<RegionLevel, string> = {
 };
 
 export const CSU_METRIC_DEFAULT: CsuMetricKey = "unemployment_pct";
+
+// ---------------------------------------------------------------------------
+// Price-changes page — listings sorted by biggest price move in a window.
+// ---------------------------------------------------------------------------
+export type PriceWindow = "1d" | "3d" | "1w" | "1m";
+
+export const PRICE_WINDOW_LABELS: Record<PriceWindow, string> = {
+  "1d": "Last 24 h",
+  "3d": "Last 3 days",
+  "1w": "Last week",
+  "1m": "Last month",
+};
+
+export type PriceSort =
+  | "abs_desc"       // biggest absolute move first (default)
+  | "delta_desc"     // biggest rise first
+  | "delta_asc"      // biggest drop first
+  | "delta_pct_desc"
+  | "delta_pct_asc";
+
+export interface PriceMover {
+  property_type: PropertyType;
+  hash_id: number;
+  title: string;
+  sub_category: string | null;
+  current_price: number | null;
+  old_price: number | null;
+  delta: number | null;
+  delta_pct: number | null;
+  last_changed_at: string | null;
+  change_count: number;
+  area: number | null;
+  per_m2: number | null;
+  obec: string | null;
+  okres: string | null;
+  kraj: string | null;
+  url: string | null;
+}
+
+export interface PriceMoversResponse {
+  window_days: number;
+  count: number;
+  limit: number;
+  offset: number;
+  rows: PriceMover[];
+}
+
+// ---------------------------------------------------------------------------
+// Listing detail — raw row from the active fact table + estate_detail.
+// The fact tables have different shapes per property type so we can't type
+// every column; the panel renders whatever's present in known buckets.
+// ---------------------------------------------------------------------------
+export type ListingDetail = Record<string, unknown> & {
+  hash_id: number;
+  property_type?: string;
+  detail_description?: string | null;
+  advert_images_count?: number | null;
+  has_floor_plan?: boolean | null;
+  has_video?: boolean | null;
+};

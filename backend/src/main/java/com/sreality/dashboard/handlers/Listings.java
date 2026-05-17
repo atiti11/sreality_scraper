@@ -102,6 +102,7 @@ public final class Listings {
                         r.put("first_seen_date", fsd == null ? null : fsd.toString());
                         r.put("url",           SrealityUrl.build(
                                                   p.deal, propertyTypeToken,
+                                                  subCategory,
                                                   obec, castObce, hashId));
                         r.put("obec",          obec);
                         r.put("okres",         rs.getString("okres"));

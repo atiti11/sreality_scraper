@@ -114,6 +114,35 @@ public final class Queries {
         };
     }
 
+    /**
+     * Minimum plausible area (m²) per property type. Catches obvious
+     * data-entry mistakes like the "House, 2 m²" listing the user spotted
+     * — a 2 m² house at 10 mn CZK reports 5 000 000 CZK/m² and skews every
+     * aggregation it lands in.
+     */
+    public static long minAreaSqm(PropertyType ptype) {
+        return switch (ptype) {
+            case APARTMENT  -> 10L;
+            case HOUSE      -> 20L;
+            case LAND       -> 50L;
+            case COMMERCIAL ->  5L;
+        };
+    }
+
+    /**
+     * Upper sanity bound on price-per-m². Prague luxury tops out around
+     * 200–250k CZK/m² for sale; anything above 500k is a data error
+     * (typo in area, mis-scraped price field, etc.). Rent has its own
+     * scale because the value is per month, not per unit.
+     */
+    public static long maxPerM2Czk(DealType deal) {
+        return switch (deal) {
+            case SALE    -> 500_000L;
+            case RENT    ->  10_000L;
+            case AUCTION -> 500_000L;
+        };
+    }
+
     // ------------------------------------------------------------------------
     // Facts CTE
     // ------------------------------------------------------------------------
@@ -133,11 +162,13 @@ public final class Queries {
         Collection<PropertyType> propertyTypes,
         String extraWhere
     ) {
-        long priceFloor = minPriceCzk(deal);
+        long priceFloor   = minPriceCzk(deal);
+        long perM2Ceiling = maxPerM2Czk(deal);
         List<String> parts = new ArrayList<>();
         for (PropertyType ptype : propertyTypes) {
             TableCfg cfg = TABLES.get(new TableKey(ptype, deal));
             if (cfg == null) continue;
+            long minArea = minAreaSqm(ptype);
             parts.add("""
                 SELECT '%s'::TEXT             AS property_type,
                        f.obec_id,
@@ -155,6 +186,13 @@ public final class Queries {
                   AND  f.is_active = TRUE
                   AND  f.%s IS NOT NULL
                   AND  f.%s >= %d
+                  -- Outlier guards: drop listings whose area or implied
+                  -- per_m2 is obviously bogus (e.g. "House, 2 m²"). Null
+                  -- areas / per_m2 are still kept — the listings table
+                  -- shows them as "—", and the aggregation_query already
+                  -- filters NULLs before averaging.
+                  AND  (f.%s IS NULL OR f.%s >= %d)
+                  AND  (%s IS NULL OR %s <= %d)
                   %s
                 """.formatted(
                     ptype.token(),
@@ -166,6 +204,8 @@ public final class Queries {
                     cfg.priceCol(),
                     cfg.priceCol(),
                     priceFloor,
+                    cfg.areaCol(), cfg.areaCol(), minArea,
+                    cfg.perM2Expr(), cfg.perM2Expr(), perM2Ceiling,
                     extraWhere
                 ));
         }

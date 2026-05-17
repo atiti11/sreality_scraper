@@ -54,6 +54,7 @@ public final class PriceChanges implements Handler {
                 "       f." + cfg.priceCol() + "::BIGINT AS price,\n" +
                 "       " + cfg.perM2Expr() + "::NUMERIC AS per_m2,\n" +
                 "       f." + cfg.areaCol() + "::NUMERIC AS area,\n" +
+                "       " + cfg.subCategoryExpr() + " AS sub_category,\n" +
                 "       f.sreality_url AS url,\n" +
                 "       f.first_seen_date\n" +
                 "FROM   " + cfg.table() + " f\n" +
@@ -77,6 +78,7 @@ public final class PriceChanges implements Handler {
             "SELECT  f.property_type,\n" +
             "        f.hash_id,\n" +
             "        f.area,\n" +
+            "        f.sub_category,\n" +
             "        f.price        AS current_price,\n" +
             "        f.per_m2       AS current_per_m2,\n" +
             "        ch.changed_at,\n" +
@@ -109,12 +111,14 @@ public final class PriceChanges implements Handler {
                     long hashId = rs.getLong("hash_id");
                     String obec = rs.getString("obec");
                     String castObce = rs.getString("cast_obce");
+                    String subCategory = rs.getString("sub_category");
 
                     Map<String, Object> r = new LinkedHashMap<>();
                     r.put("property_type", propertyTypeToken);
                     r.put("hash_id",       hashId);
                     r.put("url",           SrealityUrl.build(
                                               deal, propertyTypeToken,
+                                              subCategory,
                                               obec, castObce, hashId));
                     r.put("obec",          obec);
                     r.put("area",          nullable(rs, "area"));

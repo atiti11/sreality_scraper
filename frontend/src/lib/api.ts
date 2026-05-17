@@ -3,6 +3,7 @@ import type {
   MarkerData, RegionFeatureCollection, RegionStats, PriceChange,
   Listing, ListingsFilters, RegionsTree,
   CsuMetricKey, CsuMetricInfo, ScatterResponse,
+  PriceMoversResponse, PriceWindow, PriceSort, ListingDetail,
 } from "./types";
 import { useAuthStore } from "./auth";
 
@@ -155,4 +156,38 @@ export const api = {
       property_types: propertyTypes,
       min_listings: minListings,
     }),
+
+  // -------------------------------------------------------------------------
+  // Price-changes page — listings ranked by biggest price move in a
+  // configurable window.
+  // -------------------------------------------------------------------------
+  priceMovers: (
+    deal: DealType,
+    propertyTypes: PropertyType[],
+    window: PriceWindow,
+    sort: PriceSort,
+    regionLevel: RegionLevel | null,
+    regionId: number | null,
+    limit = 50,
+    offset = 0,
+  ) =>
+    get<PriceMoversResponse>("/api/price-movers", {
+      deal,
+      property_types: propertyTypes,
+      window,
+      sort,
+      region_level: regionLevel,
+      region_id: regionId,
+      limit,
+      offset,
+    }),
+
+  // -------------------------------------------------------------------------
+  // Per-listing detail — every column from the active fact-table row,
+  // plus the long description text from estate_detail.
+  // -------------------------------------------------------------------------
+  listingDetail: (propertyType: PropertyType, deal: DealType, hashId: number) =>
+    get<ListingDetail>(
+      `/api/listing/${propertyType}/${deal}/${hashId}/detail`
+    ),
 };

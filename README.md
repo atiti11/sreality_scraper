@@ -1,206 +1,291 @@
-# Sreality Scraper
+# Sreality — Java Homework
 
-Periodically scrapes [sreality.cz](https://www.sreality.cz) and persists listings to a MongoDB database. Designed to run on a VPS via Docker Compose.
+End-to-end Czech real-estate data platform built around the unofficial
+[sreality.cz](https://www.sreality.cz) API. Estates are scraped on a schedule,
+enriched with RUIAN geography and CSU demographic statistics, written to
+Postgres with full SCD-Type-2 history, and served through a REST API that
+powers a small dashboard.
 
 ---
 
-## Project structure
+## What is graded
+
+The homework submission consists of two Java modules:
+
+| Module        | Path        | What it is                                                                                     |
+|---------------|-------------|------------------------------------------------------------------------------------------------|
+| **Pipeline**  | `pipeline/` | Five standalone Java JARs orchestrated by Airflow that build and maintain the Postgres model.  |
+| **Backend**   | `backend/`  | Java REST API (Javalin) that queries Postgres and exposes data to the dashboard.               |
+
+Everything else in this repository is **supportive context** — it shows how
+the two graded modules fit into a real deployment, but is not part of the
+assignment itself:
+
+- `initial-load/` — one-off Java loader used to bootstrap Postgres from an existing MongoDB dump.
+- `frontend/` — React + Vite dashboard that consumes the backend API.
+- `mongo-init/`, `postgres-init/` — database init scripts used by Docker Compose.
+
+---
+
+## Architecture
+
+```
+                     ┌────────────────────────────────────────┐
+                     │              GRADED SCOPE              │
+                     ├────────────────────────────────────────┤
+   sreality.cz ──►   │  JAR 1  scraper  ──►  MongoDB (queue)  │
+                     │                              │         │
+   CUZK RUIAN  ──►   │  JAR 2  ruian    ──►         ▼         │
+                     │                       ┌─────────────┐  │
+   CSU XLSX    ──►   │  JAR 3  csu      ──►  │  Postgres   │  │
+                     │                       │  (SCD T2)   │  │
+                     │  JAR 4  enricher ◄────┤             │  │
+                     │                       └──────┬──────┘  │
+                     │  JAR 5  reporter  ──► Telegram         │
+                     │                              │         │
+                     │                              ▼         │
+                     │                       backend (REST)   │
+                     └──────────────────────────────│─────────┘
+                                                    ▼
+                                              frontend (React)
+```
+
+The pipeline runs every 12 h via Airflow. MongoDB is **only a staging queue** —
+documents are deleted after a successful Postgres write. Postgres is the
+single source of truth and the only thing the backend reads.
+
+---
+
+## Tech stack
+
+- **Java 21**, **Maven** (multi-module via `pipeline/pom.xml`)
+- **Postgres 16** — primary store, SCD Type 2
+- **MongoDB 7** — staging queue between scraper and enricher
+- **Apache Airflow** — orchestration (12 h cadence)
+- **Javalin** — backend REST framework
+- **Jackson**, **Apache HttpClient 5**, **JDBC** (no ORM)
+- **React + Vite + Tailwind** (frontend, supportive)
+- **Docker Compose** for the full stack
+
+---
+
+## Repository layout
 
 ```
 sreality_scraper/
-├── src/main/java/com/sreality/scraper/
-│   ├── Main.java                        ← entry point, runs once and exits
-│   ├── config/
-│   │   ├── AppConfig.java               ← all env vars + defaults
-│   │   ├── CategoryConfig.java          ← category code → English label + collection name
-│   │   └── LabelConfig.java             ← property / POI / building label mappings
-│   ├── http/
-│   │   └── SrealityHttpClient.java      ← HTTP client with User-Agent + typed exceptions
-│   ├── db/
-│   │   └── MongoRepository.java         ← upsert, history, indexes, scrape run report
-│   ├── model/
-│   │   └── EstateDocumentBuilder.java   ← merges listing + detail into one document
-│   ├── scraper/
-│   │   ├── EstateScraper.java           ← main loop over all 15 category combinations
-│   │   └── ScrapeRunReport.java         ← per-run stats + incomplete estate records
-│   └── util/
-│       ├── HashUtil.java                ← MD5 change-detection hash
-│       └── DateParser.java              ← Czech date string → LocalDate
-├── src/main/resources/
-│   └── logback.xml                      ← console + rolling file logging
-├── mongo-init/
-│   └── 01-init-scraper.js               ← creates DB user + indexes on first boot
-├── Dockerfile                           ← multi-stage: Maven build → slim JRE Alpine
-├── docker-compose.yml                   ← scraper + MongoDB services
-├── docker-compose.prod.yml              ← production overrides
-├── pom.xml                              ← Java 21, fat JAR via maven-shade-plugin
-├── .env.example                         ← template for secrets (copy to .env)
-├── AGENTS.md                            ← instructions for AI coding agents
-└── README.md                            ← this file
+├── pipeline/                          ← GRADED — Airflow-orchestrated JARs
+│   ├── jar0-initial-load/             (helper, runs once at bootstrap)
+│   ├── jar1-scraper/                  Sreality API  → MongoDB
+│   ├── jar2-ruian/                    CUZK VFR XML → dim_* tables
+│   ├── jar3-csu/                      CSU XLSX     → fact_obec_stats
+│   ├── jar4-enricher/                 MongoDB      → 14 fact tables + change log
+│   ├── jar5-reporter/                 Postgres     → Telegram summary
+│   ├── shared/                        common utilities (config, JDBC, logging)
+│   ├── airflow/                       DAG definitions
+│   ├── schema.sql                     full Postgres schema with comments
+│   ├── pom.xml                        parent POM
+│   └── README.md                      pipeline-specific docs
+│
+├── backend/                           ← GRADED — Javalin REST API
+│   ├── src/main/java/com/sreality/dashboard/
+│   │   ├── App.java                   entry point
+│   │   ├── handlers/                  one class per endpoint group
+│   │   ├── sql/                       parameterised queries
+│   │   └── util/                      small helpers (Pearson, URL builder)
+│   └── pom.xml
+│
+├── initial-load/                      supportive — bootstrap loader
+├── frontend/                          supportive — React dashboard
+│
+├── mongo-init/                        DB bootstrap scripts (users + indexes)
+├── postgres-init/                     DB bootstrap scripts (extensions + roles)
+│
+├── docker-compose.yml                 base services (Mongo + Postgres)
+├── docker-compose.pipeline.yml        adds Airflow + JAR runner
+├── docker-compose.dashboard.yml       adds backend + frontend (+ nginx)
+└── README.md                          this file
 ```
 
 ---
 
-## Quick start
+## How to run
 
-### 1. Create your `.env` file
+### Prerequisites
+- Docker + Docker Compose
+- Java 21 + Maven (only if you want to build JARs locally instead of in Docker)
+
+### Pipeline (graded)
 
 ```bash
 cp .env.example .env
-# Edit .env — set real passwords before deploying!
+# fill in passwords + CSU_XLSX_URLS
+
+# build all JARs
+cd pipeline && mvn package -DskipTests && cd ..
+
+# start core infrastructure
+docker compose -f docker-compose.yml -f docker-compose.pipeline.yml up -d postgres mongodb
+
+# start Airflow (schema.sql is applied automatically by Postgres on first boot)
+docker compose -f docker-compose.yml -f docker-compose.pipeline.yml run --rm airflow-init
+docker compose -f docker-compose.yml -f docker-compose.pipeline.yml up -d airflow-webserver airflow-scheduler
+
+# open Airflow at http://localhost:8080
+#   1. trigger 'ruian_full_load'  once  (dimensions must exist first)
+#   2. trigger 'csu_full_load'    once  (seeds obec_successor + history)
+#   3. 'sreality_pipeline' runs every 12h automatically
 ```
 
-### 2. Build & run locally (dev — limited to 20 estates)
+See [`pipeline/README.md`](pipeline/README.md) for the detailed JAR-by-JAR rundown.
+
+### Backend (graded)
 
 ```bash
-MAX_ESTATES=20 docker compose up --build
+cd backend && mvn package -DskipTests
+docker compose -f docker-compose.yml -f docker-compose.dashboard.yml up -d backend
+# API is at http://localhost:8081
 ```
 
-### 3. Full scrape
+### Full stack with frontend (supportive)
 
 ```bash
-docker compose up --build
+docker compose -f docker-compose.yml \
+               -f docker-compose.pipeline.yml \
+               -f docker-compose.dashboard.yml up -d
+# dashboard at http://localhost:8080 (via nginx + htpasswd)
 ```
 
-### 4. Deploy to VPS
+---
 
-```bash
-git clone <repo>
-cd sreality_scraper
+## Postgres data model — highlights
 
-cp .env.example .env
-# Edit .env with production passwords
+Full DDL with comments is in [`pipeline/schema.sql`](pipeline/schema.sql).
 
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
-```
+**Dimensions** (RUIAN geography hierarchy)
+- `dim_kraj`, `dim_okres`, `dim_obec`, `dim_cast_obce`
+- `obec_successor` — extinct-municipality → successor map (from CSU OD_KAM)
+
+**Facts**
+- `fact_apartment_sale`, `fact_apartment_rent`, … — 14 tables split by property × deal type.
+  All use SCD Type 2 (`valid_from`, `valid_to IS NULL` = current row).
+- `fact_obec_stats` — yearly CSU statistics per municipality.
+- `estate_field_changes` — unified per-field change log across all fact tables (for analytics).
+- `estate_detail` — latest description text per estate (not versioned).
+
+**Metadata**
+- `ruian_metadata` — freshness tracking for RUIAN snapshots.
+
+---
+
+## Key design decisions
+
+- **Change detection lives in Postgres, not Mongo.** JAR 1 loads
+  `(hash_id → content_hash)` from Postgres at the start of each category run.
+  Only estates with a changed hash are written to the Mongo staging queue —
+  the detail endpoint is skipped for everything else.
+- **MongoDB is staging only.** After JAR 4 commits to Postgres, the
+  corresponding Mongo documents are deleted. Nothing depends on Mongo as a
+  long-term store.
+- **SCD Type 2 everywhere.** Every fact row has `valid_from` / `valid_to`.
+  Closing a row and opening a new one happens in a single transaction.
+- **Bounding-box spatial join — no PostGIS.** RUIAN `CastObce` centroids are
+  loaded into Postgres and expanded by ~500 m. Estates are matched via
+  point-in-bbox with a centroid-distance tiebreaker.
+- **CSU municipality succession.** Extinct municipalities are kept in
+  `dim_obec` with `is_active=false`; historical stats are queried via
+  `obec_successor` so a successor still "sees" the full predecessor history.
+- **No ORM in the backend.** Hand-written SQL in `backend/.../sql/Queries.java`,
+  plain JDBC — keeps query plans predictable and the codebase small.
 
 ---
 
 ## Environment variables
 
-| Variable | Default | Description |
-|---|---|---|
-| `MONGO_HOST` | `mongodb` | MongoDB hostname |
-| `MONGO_PORT` | `27017` | MongoDB port |
-| `MONGO_DATABASE` | `sreality` | Database name |
-| `MONGO_USERNAME` | `scraper` | MongoDB username |
-| `MONGO_PASSWORD` | `changeme` | **Change in production** |
-| `SREALITY_BASE_URL` | `https://www.sreality.cz/api/cs/v2/estates` | API base URL |
-| `PER_PAGE` | `100` | Estates per listing API call |
-| `MAX_ESTATES` | `0` | Dev limiter — stop after N estates (0 = unlimited) |
-| `HTTP_CONNECT_TIMEOUT_MS` | `10000` | HTTP connect timeout |
-| `HTTP_READ_TIMEOUT_MS` | `30000` | HTTP read timeout |
+A complete template is in `.env.example`. The most important ones:
 
----
-
-## MongoDB collections
-
-| Collection | Description |
-|---|---|
-| `apartments_sale`, `houses_rent`, `land_sale`, … | One per property type × deal type (15 total) |
-| `apartments_sale_history`, `houses_rent_history`, … | Delta history for each estate collection |
-| `scrape_runs` | One document per scrape run — statistics + incomplete estate list |
-
----
-
-## Services
-
-| Service | Image | Port (host) | Notes |
-|---|---|---|---|
-| `mongodb` | `mongo:7.0` | `127.0.0.1:27017` | Only accessible locally on the VPS |
-| `scraper` | Built from `Dockerfile` | — | Runs once and exits (`restart: "no"`) |
+| Variable                                  | Purpose                                    |
+|-------------------------------------------|--------------------------------------------|
+| `POSTGRES_PASSWORD`                       | Postgres superuser password                |
+| `MONGO_PASSWORD`                          | Mongo `scraper` user password              |
+| `AIRFLOW_FERNET_KEY`                      | Airflow secrets encryption key (generate!) |
+| `CSU_XLSX_URLS`                           | Comma-separated CSU XLSX URLs for JAR 3    |
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`  | Used by JAR 5 reporter                     |
+| `MAX_ESTATES`                             | Dev limit — stop scraper after N estates   |
 
 ---
 
 ## Useful commands
 
 ```bash
-# View scraper logs
-docker compose logs -f scraper
+# tail logs of one JAR
+docker compose -f docker-compose.pipeline.yml logs -f jar1-scraper
 
-# Run with a dev limit of 50 estates
-MAX_ESTATES=50 docker compose up --build
+# open a Postgres shell
+docker compose exec postgres psql -U postgres sreality
 
-# Restart scraper only (MongoDB keeps running)
-docker compose restart scraper
+# open a Mongo shell
+docker compose exec mongodb mongosh -u scraper -p "$MONGO_PASSWORD" \
+  --authenticationDatabase sreality sreality
 
-# Open a MongoDB shell
-docker compose exec mongodb mongosh -u scraper -p changeme --authenticationDatabase sreality sreality
-
-# Connect via MongoDB Compass (local)
-mongodb://scraper:changeme@localhost:27017/sreality
-
-# Connect via MongoDB Compass (VPS — open SSH tunnel first)
-ssh -L 27017:localhost:27017 user@your-vps-ip
-# then connect Compass to localhost:27017
-
-# Stop everything (data is preserved)
+# stop everything (data is preserved)
 docker compose down
 
-# Stop and wipe the database volume (DESTRUCTIVE)
+# wipe DB volumes (DESTRUCTIVE)
 docker compose down -v
 ```
 
 ---
 
-## Querying corrupted documents
+## AI usage
 
-A document is "corrupted" when the last detail fetch failed — it has listing data
-but may be missing description, seller info, images, etc.
+This project was developed with substantial assistance from AI coding
+assistants — primarily **Claude Code** (Anthropic) and, to a smaller extent,
+**ChatGPT** (OpenAI). I want to be transparent about how they were used:
 
-```javascript
-// Count corrupted documents in one collection
-db.apartments_sale.countDocuments({ last_update_corrupted: true })
+**Where AI helped meaningfully**
+- *Scaffolding and refactors.* The repository went through several large
+  restructurings (single scraper → 5-JAR pipeline; ad-hoc Mongo schema → SCD
+  Type 2 in Postgres). Claude Code was used to propose, execute, and review
+  these refactors across many files at once.
+- *SQL.* The schema, the SCD-Type-2 upsert pattern, and most non-trivial
+  queries in `backend/.../sql/Queries.java` were drafted with AI help and
+  then verified by reading the resulting query plans (`EXPLAIN`) and the
+  output against real data.
+- *Boilerplate and glue code.* Javalin handlers, JDBC plumbing, Jackson
+  mapping, Airflow DAG skeletons, Dockerfiles and Compose files — all areas
+  where AI produced a first draft that I then trimmed and adjusted.
+- *Code review.* I regularly asked the assistant to critique my own code for
+  bugs, dead code, and style — several issues found and fixed this way are
+  visible in the git history.
+- *Documentation.* Most docstrings, the state-machine table in
+  `pipeline/jar1-scraper`, and this README itself were AI-drafted and then
+  hand-edited.
 
-// Count across all estate collections
-let total = 0;
-["apartments_sale","apartments_rent","apartments_auction",
- "houses_sale","houses_rent","houses_auction",
- "land_sale","land_rent","land_auction",
- "commercial_sale","commercial_rent","commercial_auction",
- "other_sale","other_rent","other_auction"
-].forEach(col => total += db[col].countDocuments({ last_update_corrupted: true }));
-print("Total corrupted:", total);
+**Where AI was *not* used**
+- *Architecture decisions.* The split into five JARs, the choice to use
+  Postgres as the source of truth and Mongo only as a staging queue, the
+  bounding-box-without-PostGIS spatial join, the municipality-successor model
+  for CSU stats — these are mine. AI helped me prototype alternatives, but
+  the final shape of the system reflects deliberate choices I can defend.
+- *Understanding.* I read everything the assistant produced before
+  committing it. Where I did not understand a generated snippet, I either
+  rewrote it or removed it. The code in this repository is code I can walk a
+  reviewer through line by line.
 
-// Price history for one estate
-db.apartments_sale_history.find({ hash_id: 123456789 }).sort({ recorded_at: -1 })
+**Verification**
+- All non-trivial behaviour is covered by tests or by reproducible runs
+  against real Sreality / RUIAN / CSU data; passing tests were the bar for
+  accepting AI-generated changes.
+- AI suggestions were treated as drafts, not as authority. When the
+  assistant and the actual data disagreed, the data won.
 
-// Latest scrape run summary
-db.scrape_runs.find().sort({ started_at: -1 }).limit(1)
-```
-
-The scraper automatically retries corrupted documents on every run until they are fixed.
-
----
-
-## Document update state machine
-
-The table below shows every possible combination of states when the scraper
-processes an estate, and what the outcome is.
-
-| Exists in DB? | Hash changed? | Was corrupted? | Detail result | History written? | `last_update_corrupted` after |
-|:---:|:---:|:---:|:---:|:---:|:---:|
-| No | — | — | ✅ success | ❌ no (first insert) | `false` |
-| No | — | — | ❌ fail | ❌ no (first insert) | `true` |
-| Yes | ✅ yes | No | ✅ success | ✅ yes (`content_changed`) | `false` |
-| Yes | ✅ yes | No | ❌ fail | ✅ yes (`content_changed`) | `true` (old detail preserved) |
-| Yes | ✅ yes | Yes | ✅ success | ✅ yes (`content_changed`) | `false` |
-| Yes | ✅ yes | Yes | ❌ fail | ✅ yes (`content_changed`) | `true` |
-| Yes | ❌ no | Yes | ✅ success | ✅ yes (`corruption_repaired`) | `false` |
-| Yes | ❌ no | Yes | ❌ fail | ❌ no (nothing new) | `true` |
-| Yes | ❌ no | No | — | ❌ skipped entirely | unchanged |
-
-**History entries** store only the *old* values of fields that changed — the current
-values are always in the main document. Nested objects (`seller`, `images`) are
-compared and stored as atomic blobs.
+In short: AI substantially accelerated the *writing* of this project, but the
+design, the verification, and the responsibility for the result are mine.
 
 ---
 
-## Tech stack
+## A note to the reviewer
 
-- **Java 21** — scraper runtime
-- **Maven** — build & dependency management
-- **MongoDB 7** — persistence
-- **Apache HttpClient 5** — HTTP requests
-- **Jackson** — JSON parsing
-- **Logback / SLF4J** — logging
+The graded code lives in `pipeline/` and `backend/`. The `initial-load/` and
+`frontend/` directories are included so the full system is reproducible
+end-to-end, but they are intentionally outside the scope of this submission.
