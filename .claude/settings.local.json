@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(cd /mnt/c/Users/PC/MATFYZ/magistr/1_semestr/java/sreality_scraper && grep -E \"postgres\" docker-compose.pipeline.yml | head -20)",
-      "Read(//mnt/c/Users/PC/MATFYZ/magistr/1_semestr/java/**)"
-    ]
-  }
-}
